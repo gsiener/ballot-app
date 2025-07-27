@@ -52,7 +52,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: ballot-app-client
+          projectName: ballot-app
           directory: client/dist
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
@@ -65,7 +65,7 @@ jobs:
             
             Your ballot app has been deployed to Cloudflare:
             
-            - **Frontend**: https://ballot-app-client.pages.dev
+            - **Frontend**: https://ballot-app.pages.dev
             - **Backend API**: https://ballot-app-server.${process.env.GITHUB_REPOSITORY_OWNER}.workers.dev
             
             ### Changes in this PR:

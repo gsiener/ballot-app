@@ -8,6 +8,11 @@ compatibility_date = "2024-12-01"
 HONEYCOMB_DATASET = "ballot-app"
 NODE_ENV = "production"
 
+# KV Namespace for ballot persistence
+[[kv_namespaces]]
+binding = "BALLOTS_KV"
+id = "32e08d4c582f4f27bb4ca1a2b06ae3aa"
+
 [[env.development]]
 name = "ballot-app-server-dev"
 [env.development.vars]

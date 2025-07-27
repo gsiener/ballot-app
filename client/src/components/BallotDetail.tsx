@@ -29,6 +29,7 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
   const [ballot, setBallot] = useState<Ballot | null>(null)
   const [newVote, setNewVote] = useState<Vote>({ color: 'green', comment: '', createdAt: '' })
   const [loading, setLoading] = useState(true)
+  const [copyPressed, setCopyPressed] = useState(false)
 
   useEffect(() => {
     fetchBallot()
@@ -114,15 +115,23 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
         <h1 className="text-3xl font-bold mb-2">{ballot.question}</h1>
         <div className="text-sm text-gray-600 mb-4">
           <div className="flex items-center gap-2 mb-1">
-            <p className="font-mono text-blue-600 flex-grow">{window.location.href}</p>
+            <a 
+              href={`${window.location.origin}/ballot/${ballot.id}`}
+              className="font-mono text-blue-600 flex-grow hover:underline"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {`${window.location.origin}/ballot/${ballot.id}`}
+            </a>
             <Button
               variant="outline"
               size="sm"
-              onClick={() => {
-                navigator.clipboard.writeText(window.location.href)
-                // Could add a toast notification here
+              onClick={async () => {
+                setCopyPressed(true)
+                await navigator.clipboard.writeText(`${window.location.origin}/ballot/${ballot.id}`)
+                setTimeout(() => setCopyPressed(false), 150)
               }}
-              className="h-6 w-6 p-0"
+              className={`h-6 w-6 p-0 transition-all duration-150 ${copyPressed ? 'scale-95 bg-gray-100' : ''}`}
             >
               <Copy className="h-3 w-3" />
             </Button>

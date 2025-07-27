@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 
@@ -14,11 +15,8 @@ type Ballot = {
   createdAt: string
 }
 
-interface BallotListProps {
-  onViewBallot: (ballotId: string) => void
-}
-
-export function BallotList({ onViewBallot }: BallotListProps) {
+export function BallotList() {
+  const navigate = useNavigate()
   const [ballots, setBallots] = useState<Ballot[]>([])
   const [loading, setLoading] = useState(true)
   const [newBallotQuestion, setNewBallotQuestion] = useState('')
@@ -101,7 +99,7 @@ export function BallotList({ onViewBallot }: BallotListProps) {
           <div 
             key={ballot.id} 
             className="bg-white border rounded-md p-4 hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => onViewBallot(ballot.id)}
+            onClick={() => navigate(`/ballot/${ballot.id}`)}
           >
             <h2 className="text-lg font-semibold text-blue-600 mb-1">{ballot.question}</h2>
             <p className="text-sm text-gray-600 mb-2">

@@ -3,6 +3,17 @@ import { cors } from 'hono/cors'
 import type { ApiResponse } from 'shared/dist'
 import { initTelemetry, createSpan, addSpanAttributes, recordSpanEvent, setSpanStatus } from './telemetry'
 
+type Bindings = {
+  BALLOTS_KV: KVNamespace
+}
+
+type Variables = {}
+
+type HonoEnv = {
+  Bindings: Bindings
+  Variables: Variables
+}
+
 type Vote = {
   color: 'green' | 'yellow' | 'red'
   comment?: string
@@ -16,7 +27,7 @@ type Ballot = {
   createdAt: string
 }
 
-const app = new Hono()
+const app = new Hono<HonoEnv>()
 
 app.use(cors())
 
@@ -29,8 +40,8 @@ app.use('*', async (c, next) => {
   await next()
 })
 
-// In-memory storage (for demo - in production use D1 database)
-let ballots: Ballot[] = [
+// Demo data for initial setup (only used if no data exists in KV)
+const demoData: Ballot[] = [
   {
     id: 'demo-1',
     question: 'Should we implement dark mode for the application?',
@@ -54,6 +65,31 @@ let ballots: Ballot[] = [
   }
 ]
 
+// Helper functions for KV storage
+async function getAllBallots(kv: KVNamespace): Promise<Ballot[]> {
+  try {
+    const ballotsJson = await kv.get('ballots')
+    if (ballotsJson) {
+      return JSON.parse(ballotsJson)
+    } else {
+      // Initialize with demo data if no ballots exist
+      await kv.put('ballots', JSON.stringify(demoData))
+      return demoData
+    }
+  } catch (error) {
+    console.error('Error getting ballots from KV:', error)
+    return demoData
+  }
+}
+
+async function saveBallots(kv: KVNamespace, ballots: Ballot[]): Promise<void> {
+  try {
+    await kv.put('ballots', JSON.stringify(ballots))
+  } catch (error) {
+    console.error('Error saving ballots to KV:', error)
+  }
+}
+
 app.get('/', (c) => {
   return c.text('Ballot App API - Visit /api/ballots to see all ballots')
 })
@@ -67,10 +103,12 @@ app.get('/hello', async (c) => {
 })
 
 // Get all ballots
-app.get('/api/ballots', (c) => {
+app.get('/api/ballots', async (c) => {
   const span = createSpan('get_all_ballots')
   
   try {
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
+    
     addSpanAttributes({
       'ballot.count': ballots.length,
       'operation': 'get_all_ballots'
@@ -91,7 +129,7 @@ app.get('/api/ballots', (c) => {
 })
 
 // Get single ballot
-app.get('/api/ballots/:id', (c) => {
+app.get('/api/ballots/:id', async (c) => {
   const span = createSpan('get_single_ballot')
   const id = c.req.param('id')
   
@@ -101,6 +139,7 @@ app.get('/api/ballots/:id', (c) => {
       'operation': 'get_single_ballot'
     })
     
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
     const ballot = ballots.find(b => b.id === id)
     
     if (!ballot) {
@@ -154,6 +193,8 @@ app.post('/api/ballots', async (c) => {
       return c.json({ error: 'Question is required' }, 400)
     }
     
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
+    
     const newBallot: Ballot = {
       id: `ballot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       question: question.trim(),
@@ -162,6 +203,7 @@ app.post('/api/ballots', async (c) => {
     }
     
     ballots.push(newBallot)
+    await saveBallots(c.env.BALLOTS_KV, ballots)
     
     addSpanAttributes({
       'ballot.id': newBallot.id,
@@ -197,7 +239,9 @@ app.put('/api/ballots/:id', async (c) => {
       'operation': 'update_ballot'
     })
     
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
     const ballotIndex = ballots.findIndex(b => b.id === id)
+    
     if (ballotIndex === -1) {
       addSpanAttributes({
         'ballot.found': false
@@ -212,6 +256,7 @@ app.put('/api/ballots/:id', async (c) => {
     const votesAdded = newVoteCount - originalVoteCount
     
     ballots[ballotIndex] = updatedBallot
+    await saveBallots(c.env.BALLOTS_KV, ballots)
     
     addSpanAttributes({
       'ballot.found': true,
