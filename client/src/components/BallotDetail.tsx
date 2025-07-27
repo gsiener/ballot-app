@@ -3,7 +3,7 @@ import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Label } from "./ui/label"
-import { Circle } from 'lucide-react'
+import { Circle, Copy } from 'lucide-react'
 
 const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
 
@@ -113,7 +113,20 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
       <div className="bg-white shadow-md rounded-lg p-6">
         <h1 className="text-3xl font-bold mb-2">{ballot.question}</h1>
         <div className="text-sm text-gray-600 mb-4">
-          <p>{window.location.origin}/ballot/{ballot.id}</p>
+          <div className="flex items-center gap-2 mb-1">
+            <p className="font-mono text-blue-600 flex-grow">{window.location.href}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                navigator.clipboard.writeText(window.location.href)
+                // Could add a toast notification here
+              }}
+              className="h-6 w-6 p-0"
+            >
+              <Copy className="h-3 w-3" />
+            </Button>
+          </div>
           <p>Created {new Date(ballot.createdAt).toLocaleDateString()}</p>
         </div>
         
