@@ -1,209 +1,100 @@
-# bhvr 🦫
+# Ballot App 🗳️
 
-![cover](https://cdn.stevedylan.dev/ipfs/bafybeievx27ar5qfqyqyud7kemnb5n2p4rzt2matogi6qttwkpxonqhra4)
+A modern voting and feedback application built with OpenTelemetry observability, deployed on Cloudflare's edge infrastructure.
 
-A full-stack TypeScript monorepo starter with shared types, using Bun, Hono, Vite, and React
+## Overview
 
-## Why bhvr?
+Ballot App is a real-time voting platform that allows users to create polls with color-coded feedback (green/yellow/red) and optional comments. Perfect for gathering team feedback, conducting surveys, or making collaborative decisions.
 
-While there are plenty of existing app building stacks out there, many of them are either bloated, outdated, or have too much of a vendor lock-in. bhvr is built with the opinion that you should be able to deploy your client or server in any environment while also keeping type saftey.
+### 🌟 Key Features
 
-## Features
+- **Color-Coded Voting System**: Green (positive), Yellow (neutral), Red (negative) voting options
+- **Real-Time Comments**: Add optional detailed feedback with votes
+- **Ballot Management**: Create, view, and track voting results
+- **Responsive Design**: Clean, modern UI built with TailwindCSS and Radix UI
+- **Full Observability**: OpenTelemetry instrumentation with Honeycomb integration
+- **Edge Deployment**: Deployed on Cloudflare Workers/Pages for global performance
 
-- **Full-Stack TypeScript**: End-to-end type safety between client and server
-- **Shared Types**: Common type definitions shared between client and server
-- **Monorepo Structure**: Organized as a workspaces-based monorepo
-- **Modern Stack**:
-  - [Bun](https://bun.sh) as the JavaScript runtime
-  - [Hono](https://hono.dev) as the backend framework
-  - [Vite](https://vitejs.dev) for frontend bundling
-  - [React](https://react.dev) for the frontend UI
+### 🔧 Tech Stack
+
+**Frontend**
+- React 19 with TypeScript
+- TailwindCSS for styling
+- Radix UI components
+- Vite for build tooling
+- Deployed on Cloudflare Pages
+
+**Backend**
+- Hono web framework
+- TypeScript for type safety
+- OpenTelemetry for observability
+- Deployed on Cloudflare Workers
+
+**Observability**
+- OpenTelemetry SDK with custom spans
+- Honeycomb for telemetry data collection
+- Custom metrics for voting patterns and API performance
+
+## Live Demo
+
+- **Frontend**: https://d9cc5b2a.ballot-app-client.pages.dev
+- **API**: https://ballot-app-server.siener.workers.dev
 
 ## Project Structure
 
 ```
 .
-├── client/               # React frontend
-├── server/               # Hono backend
-├── shared/               # Shared TypeScript definitions
-│   └── src/types/        # Type definitions used by both client and server
-└── package.json          # Root package.json with workspaces
+├── client/                 # React frontend application
+│   ├── src/
+│   │   ├── components/     # UI components (BallotList, BallotDetail, etc.)
+│   │   └── App.tsx         # Main application component
+│   └── package.json
+├── server/                 # Hono backend API
+│   ├── src/
+│   │   ├── index.ts        # API routes with telemetry
+│   │   └── telemetry.ts    # OpenTelemetry configuration
+│   └── package.json
+├── shared/                 # Shared TypeScript types
+│   └── src/types/
+└── wrangler.toml          # Cloudflare deployment configuration
 ```
 
-### Server
+## API Endpoints
 
-bhvr uses Hono as a backend API for it's simplicity and massive ecosystem of plugins. If you have ever used Express then it might feel familiar. Declaring routes and returning data is easy.
-
-```
-server
-├── bun.lock
-├── package.json
-├── README.md
-├── src
-│   └── index.ts
-└── tsconfig.json
-```
-
-```typescript src/index.ts
-import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import type { ApiResponse } from 'shared/dist'
-
-const app = new Hono()
-
-app.use(cors())
-
-app.get('/', (c) => {
-  return c.text('Hello Hono!')
-})
-
-app.get('/hello', async (c) => {
-
-  const data: ApiResponse = {
-    message: "Hello BHVR!",
-    success: true
-  }
-
-  return c.json(data, { status: 200 })
-})
-
-export default app
-```
-
-If you wanted to add a database to Hono you can do so with a multitude of Typescript libraries like [Supabase](https://supabase.com), or ORMs like [Drizzle](https://orm.drizzle.team/docs/get-started) or [Prisma](https://www.prisma.io/orm)
-
-### Client
-
-bhvr uses Vite + React Typescript template, which means you can build your frontend just as you would with any other React app. This makes it flexible to add UI components like [shadcn/ui](https://ui.shadcn.com) or routing using [React Router](https://reactrouter.com/start/declarative/installation).
-
-```
-client
-├── eslint.config.js
-├── index.html
-├── package.json
-├── public
-│   └── vite.svg
-├── README.md
-├── src
-│   ├── App.css
-│   ├── App.tsx
-│   ├── assets
-│   ├── index.css
-│   ├── main.tsx
-│   └── vite-env.d.ts
-├── tsconfig.app.json
-├── tsconfig.json
-├── tsconfig.node.json
-└── vite.config.ts
-```
-
-```typescript src/App.tsx
-import { useState } from 'react'
-import beaver from './assets/beaver.svg'
-import { ApiResponse } from 'shared'
-import './App.css'
-
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || "http://localhost:3000"
-
-function App() {
-  const [data, setData] = useState<ApiResponse | undefined>()
-
-  async function sendRequest() {
-    try {
-      const req = await fetch(`${SERVER_URL}/hello`)
-      const res: ApiResponse = await req.json()
-      setData(res)
-    } catch (error) {
-      console.log(error)
-    }
-  }
-
-  return (
-    <>
-      <div>
-        <a href="https://github.com/stevedylandev/bhvr" target="_blank">
-          <img src={beaver} className="logo" alt="beaver logo" />
-        </a>
-      </div>
-      <h1>bhvr</h1>
-      <h2>Bun + Hono + Vite + React</h2>
-      <p>A typesafe fullstack monorepo</p>
-      <div className="card">
-        <button onClick={sendRequest}>
-          Call API
-        </button>
-        {data && (
-          <pre className='response'>
-            <code>
-            Message: {data.message} <br />
-            Success: {data.success.toString()}
-            </code>
-          </pre>
-        )}
-      </div>
-      <p className="read-the-docs">
-        Click the beaver to learn more
-      </p>
-    </>
-  )
-}
-
-export default App
-```
-
-### Shared
-
-The Shared package is used for anything you want to share between the Server and Client. This could be types or libraries that you use in both the enviorments.
-
-```
-shared
-├── package.json
-├── src
-│   ├── index.ts
-│   └── types
-│       └── index.ts
-└── tsconfig.json
-```
-
-Inside the `src/index.ts` we export any of our code from the folders so it's usabe in other parts of the monorepo
-
-```typescript
-export * from "./types"
-```
-
-By running `bun run dev` or `bun run build` it will compile and export the packages from `shared` so it can be used in either `client` or `server`
-
-```typescript
-import { ApiResponse } from 'shared'
-```
+- `GET /api/ballots` - Retrieve all ballots
+- `GET /api/ballots/:id` - Get specific ballot details
+- `POST /api/ballots` - Create a new ballot
+- `PUT /api/ballots/:id` - Add vote to existing ballot
 
 ## Getting Started
 
-### Quick Start
+### Prerequisites
 
-You can start a new bhvr project using the [CLI](https://github.com/stevedylandev/create-bhvr)
-
-```bash
-bun create bhvr
-```
+- [Bun](https://bun.sh) runtime
+- [Wrangler CLI](https://developers.cloudflare.com/workers/wrangler/) for deployment
+- Honeycomb account for observability (optional)
 
 ### Installation
 
 ```bash
-# Install dependencies for all workspaces
+# Clone the repository
+git clone https://github.com/gsiener/ballot-app.git
+cd ballot-app
+
+# Install dependencies
 bun install
 ```
 
 ### Development
 
 ```bash
-# Run shared types in watch mode, server, and client all at once
+# Run all services in development mode
 bun run dev
 
-# Or run individual parts
-bun run dev:shared  # Watch and compile shared types
-bun run dev:server  # Run the Hono backend
-bun run dev:client  # Run the Vite dev server for React
+# Or run individually
+bun run dev:client  # Frontend dev server
+bun run dev:server  # Backend API server
+bun run dev:shared  # Watch shared types
 ```
 
 ### Building
@@ -212,38 +103,72 @@ bun run dev:client  # Run the Vite dev server for React
 # Build everything
 bun run build
 
-# Or build individual parts
-bun run build:shared  # Build the shared types package
-bun run build:client  # Build the React frontend
+# Or build individually
+bun run build:client
+bun run build:server
+bun run build:shared
 ```
 
-### Deployment
+## Deployment
 
-Deplying each piece is very versatile and can be done numerous ways, and exploration into automating these will happen at a later date. Here are some references in the meantime.
+### Environment Variables
 
-**Client**
-- [Orbiter](https://orbiter.host)
-- [GitHub Pages](https://vite.dev/guide/static-deploy.html#github-pages)
-- [Netlify](https://vite.dev/guide/static-deploy.html#netlify)
-- [Cloudflare Pages](https://vite.dev/guide/static-deploy.html#cloudflare-pages)
+Set your Honeycomb API key for observability:
 
-**Server**
-- [Cloudflare Worker](https://gist.github.com/stevedylandev/4aa1fc569bcba46b7169193c0498d0b3)
-- [Bun](https://hono.dev/docs/getting-started/bun)
-- [Node.js](https://hono.dev/docs/getting-started/nodejs)
-
-## Type Sharing
-
-Types are automatically shared between the client and server thanks to the shared package and TypeScript path aliases. You can import them in your code using:
-
-```typescript
-import { ApiResponse } from '@shared/types';
+```bash
+# Set Honeycomb API key as Cloudflare secret
+npx wrangler secret put HONEYCOMB_API_KEY
 ```
+
+### Deploy to Cloudflare
+
+```bash
+# Deploy backend (Workers)
+npx wrangler deploy
+
+# Deploy frontend (Pages)
+npx wrangler pages deploy client/dist --project-name ballot-app-client
+```
+
+## Observability
+
+The application includes comprehensive OpenTelemetry instrumentation:
+
+### Tracked Metrics
+- API request/response times
+- Ballot creation and voting patterns
+- Error rates and debugging information
+- Custom business events (ballot_created, vote_added, etc.)
+
+### Honeycomb Integration
+- Real-time performance monitoring
+- Distributed tracing across API calls
+- Custom dashboards for voting analytics
+- Error tracking and alerting
+
+## Usage
+
+1. **Create a Ballot**: Enter a question to gather feedback on
+2. **Share the Link**: Send the ballot URL to participants
+3. **Vote**: Users select green (positive), yellow (neutral), or red (negative)
+4. **Add Comments**: Optional detailed feedback with votes
+5. **View Results**: Real-time vote counts and comment threads
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
 
 ## Learn More
 
-- [Bun Documentation](https://bun.sh/docs)
-- [Vite Documentation](https://vitejs.dev/guide/)
-- [React Documentation](https://react.dev/learn)
 - [Hono Documentation](https://hono.dev/docs)
-- [TypeScript Documentation](https://www.typescriptlang.org/docs/)
+- [OpenTelemetry Documentation](https://opentelemetry.io/docs/)
+- [Cloudflare Workers Documentation](https://developers.cloudflare.com/workers/)
+- [Honeycomb Documentation](https://docs.honeycomb.io/)
