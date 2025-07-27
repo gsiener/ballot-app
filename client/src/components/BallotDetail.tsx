@@ -113,7 +113,7 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
       <div className="bg-white shadow-md rounded-lg p-6">
         <h1 className="text-3xl font-bold mb-2">{ballot.question}</h1>
         <div className="text-sm text-gray-600 mb-4">
-          <p>ballot.io/b/{ballot.id}</p>
+          <p>{window.location.origin}/ballot/{ballot.id}</p>
           <p>Created {new Date(ballot.createdAt).toLocaleDateString()}</p>
         </div>
         
