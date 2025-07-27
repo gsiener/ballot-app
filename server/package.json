@@ -17,6 +17,7 @@
     "shared": "workspace:*"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250726.0",
     "@types/bun": "latest"
   }
 }
