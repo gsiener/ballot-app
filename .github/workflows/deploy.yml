@@ -48,12 +48,13 @@ jobs:
           HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
 
       - name: Deploy to Cloudflare Pages (Client)
-        uses: cloudflare/wrangler-action@v3
+        uses: cloudflare/pages-action@v1
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy client/dist --project-name=ballot-app-client
-          workingDirectory: ./
+          projectName: ballot-app-client
+          directory: client/dist
+          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Comment deployment URLs
         if: github.event_name == 'pull_request'
