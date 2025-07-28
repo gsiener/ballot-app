@@ -1,2 +1,3 @@
-[test]
-preload = ["./src/test-setup.ts"]
+# Commented out DOM setup for utility tests
+# [test]
+# preload = ["./src/test-setup.ts"]
