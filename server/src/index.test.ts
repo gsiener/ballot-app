@@ -71,7 +71,7 @@ describe('Ballot API', () => {
       expect(mockResponse).toHaveLength(1)
       expect(mockResponse[0]).toHaveProperty('id', 'test-1')
       expect(mockResponse[0]).toHaveProperty('question', 'Test ballot?')
-      expect(mockResponse[0].votes).toHaveLength(2)
+      expect(mockResponse[0]?.votes).toHaveLength(2)
     })
   })
 
@@ -171,7 +171,7 @@ describe('Admin API', () => {
         ...ballot,
         voteCount: ballot.votes.length,
         commentCount: ballot.votes.filter(v => v.comment && v.comment.trim() !== '').length,
-        lastVote: ballot.votes.length > 0 ? ballot.votes[ballot.votes.length - 1].createdAt : null
+        lastVote: ballot.votes.length > 0 ? ballot.votes[ballot.votes.length - 1]?.createdAt || null : null
       }
 
       expect(adminBallot.voteCount).toBe(2)
@@ -254,7 +254,7 @@ describe('KV Storage Operations', () => {
     expect(mockKV.get).toHaveBeenCalledWith('ballots')
     expect(result).toBeDefined()
     
-    if (result) {
+    if (result !== null) {
       const ballots = JSON.parse(result)
       expect(Array.isArray(ballots)).toBe(true)
       expect(ballots).toHaveLength(1)

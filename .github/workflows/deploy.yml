@@ -10,9 +10,36 @@ env:
   NODE_VERSION: '20'
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    name: Run tests
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build shared types
+        run: bun run build:shared
+
+      - name: Build server
+        run: bun run build:server
+
+      - name: Run tests
+        run: bun run test
+
   deploy:
     runs-on: ubuntu-latest
     name: Deploy ballot app to Cloudflare
+    needs: test
+    if: github.ref == 'refs/heads/main'
     
     steps:
       - name: Checkout code
@@ -48,13 +75,11 @@ jobs:
           HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
 
       - name: Deploy to Cloudflare Pages (Client)
-        uses: cloudflare/pages-action@v1
+        uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          projectName: ballot-app
-          directory: client/dist
-          gitHubToken: ${{ secrets.GITHUB_TOKEN }}
+          command: pages deploy client/dist --project-name=ballot-app
 
       - name: Comment deployment URLs
         if: github.event_name == 'pull_request'
