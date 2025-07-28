@@ -2,6 +2,9 @@ name = "ballot-app-server"
 main = "server/dist/index.js"
 compatibility_date = "2024-12-01"
 
+# Pages configuration
+pages_build_output_dir = "client/dist"
+
 # Environment variables for Honeycomb integration
 # Set these in the Cloudflare dashboard or via wrangler secret
 [vars]
