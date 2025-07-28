@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "bun test src/utils/",
+    "test:components": "bun test src/components/ --env=jsdom"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.0",
