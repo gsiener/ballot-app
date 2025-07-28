@@ -5,6 +5,7 @@ import { initTelemetry, createSpan, addSpanAttributes, recordSpanEvent, setSpanS
 
 type Bindings = {
   BALLOTS_KV: KVNamespace
+  ADMIN_API_KEY?: string
 }
 
 type Variables = {}
@@ -87,6 +88,63 @@ async function saveBallots(kv: KVNamespace, ballots: Ballot[]): Promise<void> {
     await kv.put('ballots', JSON.stringify(ballots))
   } catch (error) {
     console.error('Error saving ballots to KV:', error)
+  }
+}
+
+// Admin authentication middleware
+const adminAuth = async (c: any, next: any) => {
+  const span = createSpan('admin_auth')
+  
+  try {
+    const authHeader = c.req.header('Authorization')
+    const adminKey = c.env.ADMIN_API_KEY
+    
+    if (!adminKey) {
+      addSpanAttributes({
+        'auth.error': 'no_admin_key_configured',
+        'auth.success': false
+      })
+      setSpanStatus(span, false, 'Admin key not configured')
+      span.end()
+      return c.json({ error: 'Admin functionality not available' }, 500)
+    }
+    
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      addSpanAttributes({
+        'auth.error': 'missing_bearer_token',
+        'auth.success': false
+      })
+      setSpanStatus(span, false, 'Missing authorization header')
+      span.end()
+      return c.json({ error: 'Unauthorized' }, 401)
+    }
+    
+    const token = authHeader.substring(7) // Remove 'Bearer ' prefix
+    
+    if (token !== adminKey) {
+      addSpanAttributes({
+        'auth.error': 'invalid_token',
+        'auth.success': false
+      })
+      setSpanStatus(span, false, 'Invalid admin token')
+      recordSpanEvent('admin_auth_failed', { 'auth.attempt': 'invalid_token' })
+      span.end()
+      return c.json({ error: 'Unauthorized' }, 401)
+    }
+    
+    addSpanAttributes({
+      'auth.success': true,
+      'auth.type': 'admin'
+    })
+    recordSpanEvent('admin_auth_success', { 'auth.method': 'bearer_token' })
+    
+    await next()
+  } catch (error) {
+    setSpanStatus(span, false, `Admin auth error: ${error}`)
+    span.end()
+    return c.json({ error: 'Authentication error' }, 500)
+  } finally {
+    span.end()
   }
 }
 
@@ -273,6 +331,102 @@ app.put('/api/ballots/:id', async (c) => {
     
     setSpanStatus(span, true)
     return c.json(ballots[ballotIndex])
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+// Admin endpoints - protected by authentication
+app.get('/api/admin/ballots', adminAuth, async (c) => {
+  const span = createSpan('admin_get_all_ballots')
+  
+  try {
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
+    
+    // Add admin metadata
+    const adminBallots = ballots.map(ballot => ({
+      ...ballot,
+      voteCount: ballot.votes.length,
+      commentCount: ballot.votes.filter(v => v.comment && v.comment.trim() !== '').length,
+      lastVote: ballot.votes.length > 0 ? ballot.votes[ballot.votes.length - 1]!.createdAt : null
+    }))
+    
+    addSpanAttributes({
+      'ballot.count': ballots.length,
+      'operation': 'admin_get_all_ballots',
+      'admin.action': 'list_ballots'
+    })
+    
+    recordSpanEvent('admin_ballots_accessed', {
+      'ballots.count': ballots.length,
+      'admin.user': 'authenticated'
+    })
+    
+    setSpanStatus(span, true)
+    return c.json(adminBallots)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.delete('/api/admin/ballots/:id', adminAuth, async (c) => {
+  const span = createSpan('admin_delete_ballot')
+  const id = c.req.param('id')
+  
+  try {
+    addSpanAttributes({
+      'ballot.id': id,
+      'operation': 'admin_delete_ballot',
+      'admin.action': 'delete_ballot'
+    })
+    
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
+    const ballotIndex = ballots.findIndex(b => b.id === id)
+    
+    if (ballotIndex === -1) {
+      addSpanAttributes({
+        'ballot.found': false
+      })
+      recordSpanEvent('admin_delete_failed', { 
+        'ballot.id': id,
+        'error': 'ballot_not_found'
+      })
+      setSpanStatus(span, false, 'Ballot not found')
+      return c.json({ error: 'Ballot not found' }, 404)
+    }
+    
+    const deletedBallot = ballots[ballotIndex]!
+    ballots.splice(ballotIndex, 1)
+    await saveBallots(c.env.BALLOTS_KV, ballots)
+    
+    addSpanAttributes({
+      'ballot.found': true,
+      'ballot.question': deletedBallot.question,
+      'ballot.vote_count': deletedBallot.votes.length
+    })
+    
+    recordSpanEvent('admin_ballot_deleted', {
+      'ballot.id': id,
+      'ballot.question': deletedBallot.question,
+      'ballot.votes': deletedBallot.votes.length,
+      'admin.user': 'authenticated'
+    })
+    
+    setSpanStatus(span, true)
+    return c.json({ 
+      message: 'Ballot deleted successfully',
+      deletedBallot: {
+        id: deletedBallot.id,
+        question: deletedBallot.question,
+        voteCount: deletedBallot.votes.length
+      }
+    })
   } catch (error) {
     setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
     throw error
