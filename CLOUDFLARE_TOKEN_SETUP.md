@@ -112,6 +112,12 @@ After updating the token, the workflow will:
 **"Account membership not found"**  
 - ✅ Add User → Memberships → Read permission
 
+**"Authentication error [code: 10000]" for Pages project**
+- ✅ Ensure Cloudflare Pages → Edit permission is set to "All accounts"
+- ✅ Try creating a completely new API token instead of editing existing one
+- ✅ Verify project exists: Pages project `ballot-app` must exist in dashboard
+- ✅ Consider using Account-level token instead of Zone-level token
+
 **"Project not found"**
 - ✅ Ensure project name matches: `ballot-app`
 - ✅ Project should exist in Cloudflare Pages dashboard

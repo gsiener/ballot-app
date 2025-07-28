@@ -67,6 +67,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.26.0'
           command: deploy
           workingDirectory: ./
           secrets: |
@@ -79,6 +80,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.26.0'
           command: pages deploy client/dist --project-name=ballot-app
 
       - name: Comment deployment URLs
