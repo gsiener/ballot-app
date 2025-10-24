@@ -62,6 +62,9 @@ jobs:
       - name: Build client
         run: bun run build:client
 
+      - name: Copy Pages Functions to dist
+        run: cp -r client/functions client/dist/
+
       - name: Deploy to Cloudflare Workers (Server)
         uses: cloudflare/wrangler-action@v3
         with:
