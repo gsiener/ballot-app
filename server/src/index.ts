@@ -445,6 +445,66 @@ app.delete('/api/admin/ballots/:id', adminAuth, async (c) => {
   }
 })
 
+app.post('/api/admin/ballots/migrate', adminAuth, async (c) => {
+  const span = createSpan('admin_migrate_ballots')
+
+  try {
+    const { ballots: incomingBallots } = await c.req.json()
+
+    addSpanAttributes({
+      'operation': 'admin_migrate_ballots',
+      'admin.action': 'migrate_ballots',
+      'ballots.incoming_count': incomingBallots?.length || 0
+    })
+
+    if (!Array.isArray(incomingBallots)) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Invalid ballots format'
+      })
+      setSpanStatus(span, false, 'Invalid ballots format')
+      return c.json({ error: 'Ballots must be an array' }, 400)
+    }
+
+    const existingBallots = await getAllBallots(c.env.BALLOTS_KV)
+    const existingIds = new Set(existingBallots.map(b => b.id))
+
+    // Filter out duplicates
+    const newBallots = incomingBallots.filter((b: Ballot) => !existingIds.has(b.id))
+
+    // Merge and save
+    const mergedBallots = [...existingBallots, ...newBallots]
+    await saveBallots(c.env.BALLOTS_KV, mergedBallots)
+
+    addSpanAttributes({
+      'ballots.existing_count': existingBallots.length,
+      'ballots.new_count': newBallots.length,
+      'ballots.total_count': mergedBallots.length,
+      'ballots.duplicates_skipped': incomingBallots.length - newBallots.length
+    })
+
+    recordSpanEvent('admin_ballots_migrated', {
+      'ballots.migrated': newBallots.length,
+      'ballots.total': mergedBallots.length,
+      'admin.user': 'authenticated'
+    })
+
+    setSpanStatus(span, true)
+    return c.json({
+      message: 'Migration successful',
+      existingCount: existingBallots.length,
+      migratedCount: newBallots.length,
+      duplicatesSkipped: incomingBallots.length - newBallots.length,
+      totalCount: mergedBallots.length
+    })
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
 export default {
   fetch: app.fetch,
 }
