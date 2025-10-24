@@ -53,7 +53,7 @@ export function BallotList() {
       })
       if (!response.ok) throw new Error('Failed to create ballot')
       const newBallot = await response.json()
-      setBallots([...ballots, newBallot])
+      setBallots([newBallot, ...ballots])
       setNewBallotQuestion('')
     } catch (error) {
       console.error('Error creating ballot:', error)
