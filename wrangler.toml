@@ -3,7 +3,6 @@ main = "server/dist/index.js"
 compatibility_date = "2024-12-01"
 
 # Environment variables for Honeycomb integration
-# Set these in the Cloudflare dashboard or via wrangler secret
 [vars]
 HONEYCOMB_DATASET = "ballot-app"
 NODE_ENV = "production"
@@ -16,7 +15,13 @@ id = "32e08d4c582f4f27bb4ca1a2b06ae3aa"
 [env.development]
 name = "ballot-app-server-dev"
 vars = { HONEYCOMB_DATASET = "ballot-app-dev", NODE_ENV = "development" }
+[[env.development.kv_namespaces]]
+binding = "BALLOTS_KV"
+id = "your-dev-kv-id-here"
 
 [env.production]
-name = "ballot-app-server"
+# Don't override name - let it use the top-level name
 vars = { HONEYCOMB_DATASET = "ballot-app", NODE_ENV = "production" }
+[[env.production.kv_namespaces]]
+binding = "BALLOTS_KV"
+id = "32e08d4c582f4f27bb4ca1a2b06ae3aa"
