@@ -11,17 +11,3 @@ NODE_ENV = "production"
 [[kv_namespaces]]
 binding = "BALLOTS_KV"
 id = "32e08d4c582f4f27bb4ca1a2b06ae3aa"
-
-[env.development]
-name = "ballot-app-server-dev"
-vars = { HONEYCOMB_DATASET = "ballot-app-dev", NODE_ENV = "development" }
-[[env.development.kv_namespaces]]
-binding = "BALLOTS_KV"
-id = "your-dev-kv-id-here"
-
-[env.production]
-# Don't override name - let it use the top-level name
-vars = { HONEYCOMB_DATASET = "ballot-app", NODE_ENV = "production" }
-[[env.production.kv_namespaces]]
-binding = "BALLOTS_KV"
-id = "32e08d4c582f4f27bb4ca1a2b06ae3aa"
