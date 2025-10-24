@@ -166,18 +166,23 @@ app.get('/api/ballots', async (c) => {
   
   try {
     const ballots = await getAllBallots(c.env.BALLOTS_KV)
-    
+
+    // Sort by createdAt descending (newest first)
+    const sortedBallots = ballots.sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+
     addSpanAttributes({
       'ballot.count': ballots.length,
       'operation': 'get_all_ballots'
     })
-    
+
     recordSpanEvent('ballots_retrieved', {
       'ballot.count': ballots.length
     })
-    
+
     setSpanStatus(span, true)
-    return c.json(ballots)
+    return c.json(sortedBallots)
   } catch (error) {
     setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
     throw error
