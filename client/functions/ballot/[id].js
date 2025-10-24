@@ -3,14 +3,10 @@
  * This enables rich unfurling in Slack, Twitter, Discord, etc.
  */
 
-interface Env {
-  // No additional bindings needed - we'll use fetch to call the API
-}
-
 const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots';
 
 // Detect if the request is from a bot/crawler
-function isBot(userAgent: string): boolean {
+function isBot(userAgent) {
   const botPatterns = [
     'Slackbot',
     'Twitterbot',
@@ -27,11 +23,11 @@ function isBot(userAgent: string): boolean {
   );
 }
 
-function generateOGHtml(ballot: any): string {
+function generateOGHtml(ballot) {
   const voteCount = ballot.votes?.length || 0;
-  const greenVotes = ballot.votes?.filter((v: any) => v.color === 'green').length || 0;
-  const yellowVotes = ballot.votes?.filter((v: any) => v.color === 'yellow').length || 0;
-  const redVotes = ballot.votes?.filter((v: any) => v.color === 'red').length || 0;
+  const greenVotes = ballot.votes?.filter(v => v.color === 'green').length || 0;
+  const yellowVotes = ballot.votes?.filter(v => v.color === 'yellow').length || 0;
+  const redVotes = ballot.votes?.filter(v => v.color === 'red').length || 0;
 
   const description = `${voteCount} total votes • 🟢 ${greenVotes} 🟡 ${yellowVotes} 🔴 ${redVotes}`;
 
@@ -67,8 +63,8 @@ function generateOGHtml(ballot: any): string {
 </html>`;
 }
 
-function escapeHtml(text: string): string {
-  const map: { [key: string]: string } = {
+function escapeHtml(text) {
+  const map = {
     '&': '&amp;',
     '<': '&lt;',
     '>': '&gt;',
@@ -78,9 +74,9 @@ function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, m => map[m] || m);
 }
 
-export const onRequest: PagesFunction<Env> = async (context) => {
+export async function onRequest(context) {
   const { request, params } = context;
-  const ballotId = params.id as string;
+  const ballotId = params.id;
   const userAgent = request.headers.get('User-Agent') || '';
 
   // Only generate OG tags for bots/crawlers
@@ -112,4 +108,4 @@ export const onRequest: PagesFunction<Env> = async (context) => {
     // On error, let the SPA handle it
     return context.next();
   }
-};
+}
