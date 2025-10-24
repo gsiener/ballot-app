@@ -62,9 +62,6 @@ jobs:
       - name: Build client
         run: bun run build:client
 
-      - name: Copy Pages Functions to dist
-        run: cp -r client/functions client/dist/
-
       - name: Deploy to Cloudflare Workers (Server)
         uses: cloudflare/wrangler-action@v3
         with:
@@ -84,7 +81,8 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           wranglerVersion: '4.26.0'
-          command: pages deploy client/dist --project-name=ballot-app
+          command: pages deploy
+          workingDirectory: ./client
 
       - name: Comment deployment URLs
         if: github.event_name == 'pull_request'
