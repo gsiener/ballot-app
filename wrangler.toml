@@ -13,14 +13,10 @@ NODE_ENV = "production"
 binding = "BALLOTS_KV"
 id = "32e08d4c582f4f27bb4ca1a2b06ae3aa"
 
-[[env.development]]
+[env.development]
 name = "ballot-app-server-dev"
-[env.development.vars]
-HONEYCOMB_DATASET = "ballot-app-dev"
-NODE_ENV = "development"
+vars = { HONEYCOMB_DATASET = "ballot-app-dev", NODE_ENV = "development" }
 
-[[env.production]]
+[env.production]
 name = "ballot-app-server"
-[env.production.vars]
-HONEYCOMB_DATASET = "ballot-app"
-NODE_ENV = "production"
+vars = { HONEYCOMB_DATASET = "ballot-app", NODE_ENV = "production" }
