@@ -345,9 +345,14 @@ app.get('/api/admin/ballots', adminAuth, async (c) => {
   
   try {
     const ballots = await getAllBallots(c.env.BALLOTS_KV)
-    
+
+    // Sort by createdAt descending (newest first)
+    const sortedBallots = ballots.sort((a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    )
+
     // Add admin metadata
-    const adminBallots = ballots.map(ballot => ({
+    const adminBallots = sortedBallots.map(ballot => ({
       ...ballot,
       voteCount: ballot.votes.length,
       commentCount: ballot.votes.filter(v => v.comment && v.comment.trim() !== '').length,
