@@ -34,9 +34,13 @@ export function AdminPanel() {
       setLoading(false)
       return
     }
-    
+
     fetchAdminBallots()
   }, [adminKey])
+
+  useEffect(() => {
+    document.title = 'Ballot Admin'
+  }, [])
 
   const fetchAdminBallots = async () => {
     if (!adminKey) return
