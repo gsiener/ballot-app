@@ -29,7 +29,11 @@ function generateOGHtml(ballot) {
   const yellowVotes = ballot.votes?.filter(v => v.color === 'yellow').length || 0;
   const redVotes = ballot.votes?.filter(v => v.color === 'red').length || 0;
 
-  const description = `${voteCount} total votes • 🟢 ${greenVotes} 🟡 ${yellowVotes} 🔴 ${redVotes}`;
+  const description = `${voteCount} total vote${voteCount !== 1 ? 's' : ''} • 🟢 ${greenVotes} 🟡 ${yellowVotes} 🔴 ${redVotes}`;
+
+  // Generate a simple visual representation for Slack/social
+  const ballotUrl = `https://ballot.io/ballot/${ballot.id}`;
+  const imageUrl = `https://ballot.io/vite.svg`; // Using existing logo for now
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -39,21 +43,27 @@ function generateOGHtml(ballot) {
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://ballot.io/ballot/${ballot.id}" />
+    <meta property="og:url" content="${ballotUrl}" />
     <meta property="og:title" content="${escapeHtml(ballot.question)}" />
     <meta property="og:description" content="${description}" />
-    <meta property="og:site_name" content="Ballot.io" />
+    <meta property="og:site_name" content="Ballot" />
+    <meta property="og:image" content="${imageUrl}" />
 
     <!-- Twitter -->
-    <meta name="twitter:card" content="summary" />
-    <meta name="twitter:url" content="https://ballot.io/ballot/${ballot.id}" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="${ballotUrl}" />
     <meta name="twitter:title" content="${escapeHtml(ballot.question)}" />
     <meta name="twitter:description" content="${description}" />
+    <meta name="twitter:image" content="${imageUrl}" />
 
-    <title>${escapeHtml(ballot.question)}</title>
+    <!-- Slack-specific -->
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+
+    <title>${escapeHtml(ballot.question)} - Ballot</title>
 
     <!-- Redirect to actual app after meta tags are read -->
-    <meta http-equiv="refresh" content="0;url=https://ballot.io/ballot/${ballot.id}" />
+    <meta http-equiv="refresh" content="0;url=${ballotUrl}" />
   </head>
   <body>
     <h1>${escapeHtml(ballot.question)}</h1>
