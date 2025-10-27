@@ -9,8 +9,9 @@ function App() {
       <div className="min-h-screen bg-gray-50">
         <Routes>
           <Route path="/" element={<BallotList />} />
-          <Route path="/ballot/:id" element={<BallotDetailPage />} />
           <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/ballot/:id" element={<BallotDetailPage />} />
+          <Route path="/:id" element={<BallotDetailPage />} />
         </Routes>
       </div>
     </Router>

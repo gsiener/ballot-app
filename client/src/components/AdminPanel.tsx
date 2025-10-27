@@ -298,7 +298,7 @@ export function AdminPanel() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => window.open(`/ballot/${ballot.id}`, '_blank')}
+                      onClick={() => window.open(`/${ballot.id}`, '_blank')}
                       className="text-blue-600 hover:text-blue-700"
                     >
                       View

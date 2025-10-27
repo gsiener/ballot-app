@@ -115,20 +115,20 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
         <h1 className="text-3xl font-bold mb-2">{ballot.question}</h1>
         <div className="text-sm text-gray-600 mb-4">
           <div className="flex items-center gap-2 mb-1">
-            <a 
-              href={`${window.location.origin}/ballot/${ballot.id}`}
+            <a
+              href={`${window.location.origin}/${ballot.id}`}
               className="font-mono text-blue-600 flex-grow hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >
-              {`${window.location.origin}/ballot/${ballot.id}`}
+              {`${window.location.origin}/${ballot.id}`}
             </a>
             <Button
               variant="outline"
               size="sm"
               onClick={async () => {
                 setCopyPressed(true)
-                await navigator.clipboard.writeText(`${window.location.origin}/ballot/${ballot.id}`)
+                await navigator.clipboard.writeText(`${window.location.origin}/${ballot.id}`)
                 setTimeout(() => setCopyPressed(false), 150)
               }}
               className={`h-6 w-6 p-0 transition-all duration-150 ${copyPressed ? 'scale-95 bg-gray-100' : ''}`}

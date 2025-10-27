@@ -116,10 +116,10 @@ export function BallotList() {
       
       <div className="space-y-4">
         {ballots.map(ballot => (
-          <div 
-            key={ballot.id} 
+          <div
+            key={ballot.id}
             className="bg-white border rounded-md p-4 hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => navigate(`/ballot/${ballot.id}`)}
+            onClick={() => navigate(`/${ballot.id}`)}
           >
             <h2 className="text-lg font-semibold text-blue-600 mb-1">{ballot.question}</h2>
             <p className="text-sm text-gray-600 mb-2">
