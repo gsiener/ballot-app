@@ -13,6 +13,7 @@ type Ballot = {
     comment?: string
   }>
   createdAt: string
+  isPrivate?: boolean
 }
 
 export function BallotList() {
@@ -20,6 +21,7 @@ export function BallotList() {
   const [ballots, setBallots] = useState<Ballot[]>([])
   const [loading, setLoading] = useState(true)
   const [newBallotQuestion, setNewBallotQuestion] = useState('')
+  const [isPrivate, setIsPrivate] = useState(false)
 
   useEffect(() => {
     fetchBallots()
@@ -49,12 +51,16 @@ export function BallotList() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ question: newBallotQuestion.trim() }),
+        body: JSON.stringify({
+          question: newBallotQuestion.trim(),
+          isPrivate: isPrivate
+        }),
       })
       if (!response.ok) throw new Error('Failed to create ballot')
       const newBallot = await response.json()
       setBallots([newBallot, ...ballots])
       setNewBallotQuestion('')
+      setIsPrivate(false)
     } catch (error) {
       console.error('Error creating ballot:', error)
     }
@@ -80,17 +86,31 @@ export function BallotList() {
     <div className="container mx-auto p-4 max-w-3xl">
       <div className="mb-6 p-4 bg-white rounded-md shadow-sm">
         <h1 className="text-xl mb-4">Create a ballot by asking a question you want feedback to...</h1>
-        <form onSubmit={createBallot} className="flex gap-2">
-          <Input
-            type="text"
-            value={newBallotQuestion}
-            onChange={(e) => setNewBallotQuestion(e.target.value)}
-            placeholder="Enter your ballot question"
-            className="flex-grow"
-          />
-          <Button type="submit" className="bg-red-500 hover:bg-red-600 text-white">
-            Create Ballot
-          </Button>
+        <form onSubmit={createBallot} className="space-y-3">
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              value={newBallotQuestion}
+              onChange={(e) => setNewBallotQuestion(e.target.value)}
+              placeholder="Enter your ballot question"
+              className="flex-grow"
+            />
+            <Button type="submit" className="bg-red-500 hover:bg-red-600 text-white">
+              Create Ballot
+            </Button>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="private-checkbox"
+              checked={isPrivate}
+              onChange={(e) => setIsPrivate(e.target.checked)}
+              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+            />
+            <label htmlFor="private-checkbox" className="text-sm text-gray-700 cursor-pointer">
+              Make this ballot private (accessible by link only, not listed publicly)
+            </label>
+          </div>
         </form>
       </div>
       

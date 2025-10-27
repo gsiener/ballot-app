@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from "./ui/button"
-import { Trash2, AlertTriangle, Shield, Eye, MessageSquare } from 'lucide-react'
+import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock } from 'lucide-react'
 
 const API_URL = 'https://ballot-app-server.siener.workers.dev/api'
 
@@ -17,6 +17,7 @@ type AdminBallot = {
   voteCount: number
   commentCount: number
   lastVote: string | null
+  isPrivate?: boolean
 }
 
 export function AdminPanel() {
@@ -76,15 +77,15 @@ export function AdminPanel() {
 
   const handleDeleteBallot = async (ballotId: string, ballotQuestion: string) => {
     if (!adminKey) return
-    
+
     const confirmDelete = window.confirm(
       `Are you sure you want to delete this ballot?\n\n"${ballotQuestion}"\n\nThis action cannot be undone.`
     )
-    
+
     if (!confirmDelete) return
-    
+
     setDeleting(ballotId)
-    
+
     try {
       const response = await fetch(`${API_URL}/admin/ballots/${ballotId}`, {
         method: 'DELETE',
@@ -93,24 +94,56 @@ export function AdminPanel() {
           'Content-Type': 'application/json',
         },
       })
-      
+
       if (!response.ok) throw new Error('Failed to delete ballot')
-      
+
       // Remove from local state
       setBallots(prev => prev.filter(ballot => ballot.id !== ballotId))
-      
+
       // Show success message briefly
       const deletedMessage = document.createElement('div')
       deletedMessage.textContent = 'Ballot deleted successfully'
       deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
       document.body.appendChild(deletedMessage)
       setTimeout(() => document.body.removeChild(deletedMessage), 3000)
-      
+
     } catch (error) {
       console.error('Error deleting ballot:', error)
       alert('Failed to delete ballot. Please try again.')
     } finally {
       setDeleting(null)
+    }
+  }
+
+  const handleTogglePrivacy = async (ballotId: string, currentPrivacy: boolean) => {
+    if (!adminKey) return
+
+    try {
+      const response = await fetch(`${API_URL}/admin/ballots/${ballotId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${adminKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ isPrivate: !currentPrivacy }),
+      })
+
+      if (!response.ok) throw new Error('Failed to update privacy')
+
+      const updatedBallot = await response.json()
+
+      // Update local state
+      setBallots(prev =>
+        prev.map(ballot =>
+          ballot.id === ballotId
+            ? { ...ballot, isPrivate: updatedBallot.isPrivate }
+            : ballot
+        )
+      )
+
+    } catch (error) {
+      console.error('Error toggling privacy:', error)
+      alert('Failed to update privacy setting. Please try again.')
     }
   }
 
@@ -192,10 +225,18 @@ export function AdminPanel() {
               <div key={ballot.id} className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-grow">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                      {ballot.question}
-                    </h3>
-                    
+                    <div className="flex items-center gap-2 mb-2">
+                      <h3 className="text-lg font-semibold text-gray-900">
+                        {ballot.question}
+                      </h3>
+                      {ballot.isPrivate && (
+                        <div className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                          <Lock className="w-3 h-3" />
+                          <span>Private</span>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex items-center gap-6 text-sm text-gray-600 mb-4">
                       <div className="flex items-center gap-1">
                         <Eye className="w-4 h-4" />
@@ -235,6 +276,25 @@ export function AdminPanel() {
                   </div>
                   
                   <div className="flex items-center gap-2 ml-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleTogglePrivacy(ballot.id, ballot.isPrivate || false)}
+                      className="flex items-center gap-1"
+                      title={ballot.isPrivate ? 'Make public' : 'Make private'}
+                    >
+                      {ballot.isPrivate ? (
+                        <>
+                          <Unlock className="w-4 h-4" />
+                          Make Public
+                        </>
+                      ) : (
+                        <>
+                          <Lock className="w-4 h-4" />
+                          Make Private
+                        </>
+                      )}
+                    </Button>
                     <Button
                       variant="outline"
                       size="sm"

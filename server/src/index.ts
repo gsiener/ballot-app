@@ -26,6 +26,7 @@ type Ballot = {
   question: string
   votes: Vote[]
   createdAt: string
+  isPrivate?: boolean
 }
 
 const app = new Hono<HonoEnv>()
@@ -167,18 +168,23 @@ app.get('/api/ballots', async (c) => {
   try {
     const ballots = await getAllBallots(c.env.BALLOTS_KV)
 
+    // Filter out private ballots from public listing
+    const publicBallots = ballots.filter(ballot => !ballot.isPrivate)
+
     // Sort by createdAt descending (newest first)
-    const sortedBallots = ballots.sort((a, b) =>
+    const sortedBallots = publicBallots.sort((a, b) =>
       new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     )
 
     addSpanAttributes({
-      'ballot.count': ballots.length,
+      'ballot.count': sortedBallots.length,
+      'ballot.total_count': ballots.length,
       'operation': 'get_all_ballots'
     })
 
     recordSpanEvent('ballots_retrieved', {
-      'ballot.count': ballots.length
+      'ballot.count': sortedBallots.length,
+      'ballot.private_count': ballots.length - sortedBallots.length
     })
 
     setSpanStatus(span, true)
@@ -239,13 +245,14 @@ app.post('/api/ballots', async (c) => {
   const span = createSpan('create_ballot')
   
   try {
-    const { question } = await c.req.json()
-    
+    const { question, isPrivate } = await c.req.json()
+
     addSpanAttributes({
       'operation': 'create_ballot',
-      'question.provided': !!question
+      'question.provided': !!question,
+      'ballot.is_private': !!isPrivate
     })
-    
+
     if (!question || typeof question !== 'string') {
       addSpanAttributes({
         'validation.failed': true,
@@ -255,14 +262,15 @@ app.post('/api/ballots', async (c) => {
       setSpanStatus(span, false, 'Question is required')
       return c.json({ error: 'Question is required' }, 400)
     }
-    
+
     const ballots = await getAllBallots(c.env.BALLOTS_KV)
-    
+
     const newBallot: Ballot = {
       id: `ballot-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       question: question.trim(),
       votes: [],
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
+      isPrivate: isPrivate === true
     }
     
     ballots.push(newBallot)
@@ -437,6 +445,60 @@ app.delete('/api/admin/ballots/:id', adminAuth, async (c) => {
         voteCount: deletedBallot.votes.length
       }
     })
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.patch('/api/admin/ballots/:id', adminAuth, async (c) => {
+  const span = createSpan('admin_update_ballot')
+  const id = c.req.param('id')
+
+  try {
+    const { isPrivate } = await c.req.json()
+
+    addSpanAttributes({
+      'ballot.id': id,
+      'operation': 'admin_update_ballot',
+      'admin.action': 'toggle_privacy',
+      'ballot.is_private': isPrivate
+    })
+
+    const ballots = await getAllBallots(c.env.BALLOTS_KV)
+    const ballotIndex = ballots.findIndex(b => b.id === id)
+
+    if (ballotIndex === -1) {
+      addSpanAttributes({
+        'ballot.found': false
+      })
+      recordSpanEvent('admin_update_failed', {
+        'ballot.id': id,
+        'error': 'ballot_not_found'
+      })
+      setSpanStatus(span, false, 'Ballot not found')
+      return c.json({ error: 'Ballot not found' }, 404)
+    }
+
+    // Update the privacy status
+    ballots[ballotIndex]!.isPrivate = isPrivate
+    await saveBallots(c.env.BALLOTS_KV, ballots)
+
+    addSpanAttributes({
+      'ballot.found': true,
+      'ballot.updated': true
+    })
+
+    recordSpanEvent('admin_ballot_updated', {
+      'ballot.id': id,
+      'ballot.is_private': isPrivate,
+      'admin.user': 'authenticated'
+    })
+
+    setSpanStatus(span, true)
+    return c.json(ballots[ballotIndex])
   } catch (error) {
     setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
     throw error
