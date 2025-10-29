@@ -32,8 +32,8 @@ function generateOGHtml(ballot) {
   const description = `${voteCount} total vote${voteCount !== 1 ? 's' : ''} • ✅ ${greenVotes} ⚠️ ${yellowVotes} ❌ ${redVotes}`;
 
   // Generate a simple visual representation for Slack/social
-  const ballotUrl = `https://ballot.io/ballot/${ballot.id}`;
-  const imageUrl = `https://ballot.io/vite.svg`; // Using existing logo for now
+  const ballotUrl = `https://ballot.io/${ballot.id}`;
+  const imageUrl = `https://ballot.io/vite.svg`;
 
   return `<!DOCTYPE html>
 <html lang="en">
