@@ -259,15 +259,15 @@ export function AdminPanel() {
                     {/* Vote breakdown */}
                     <div className="flex items-center gap-4 mb-4">
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-green-500"></div>
+                        <span>✅</span>
                         <span className="text-sm">{countVotesByColor(ballot, 'green')}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+                        <span>⚠️</span>
                         <span className="text-sm">{countVotesByColor(ballot, 'yellow')}</span>
                       </div>
                       <div className="flex items-center gap-1">
-                        <div className="w-3 h-3 rounded-full bg-red-500"></div>
+                        <span>❌</span>
                         <span className="text-sm">{countVotesByColor(ballot, 'red')}</span>
                       </div>
                     </div>

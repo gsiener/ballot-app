@@ -3,7 +3,7 @@ import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Label } from "./ui/label"
-import { Circle, Copy } from 'lucide-react'
+import { Copy } from 'lucide-react'
 
 const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
 
@@ -81,15 +81,6 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
     return ballot?.votes.filter(v => v.color === color).length || 0
   }
 
-  const getColorClass = (color: string) => {
-    switch (color) {
-      case 'green': return 'text-green-500'
-      case 'yellow': return 'text-yellow-500'
-      case 'red': return 'text-red-500'
-      default: return ''
-    }
-  }
-
   if (loading) {
     return (
       <div className="container mx-auto p-4 max-w-3xl">
@@ -152,7 +143,9 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
         <div className="space-y-4 mb-8">
           {ballot.votes.filter(v => v.comment).map((vote, index) => (
             <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded">
-              <Circle className={`w-6 h-6 mt-1 ${getColorClass(vote.color)}`} />
+              <span className="text-2xl mt-1">
+                {vote.color === 'green' ? '✅' : vote.color === 'yellow' ? '⚠️' : '❌'}
+              </span>
               <div className="flex-grow">
                 <p className="text-gray-800">{vote.comment}</p>
                 <p className="text-sm text-gray-600">

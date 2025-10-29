@@ -127,15 +127,15 @@ export function BallotList() {
             </p>
             <div className="flex items-center space-x-4">
               <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full bg-green-500 mr-1"></div>
+                <span className="mr-1">✅</span>
                 <span>{countVotes(ballot, 'green')}</span>
               </div>
               <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full bg-yellow-500 mr-1"></div>
+                <span className="mr-1">⚠️</span>
                 <span>{countVotes(ballot, 'yellow')}</span>
               </div>
               <div className="flex items-center">
-                <div className="w-4 h-4 rounded-full bg-red-500 mr-1"></div>
+                <span className="mr-1">❌</span>
                 <span>{countVotes(ballot, 'red')}</span>
               </div>
             </div>

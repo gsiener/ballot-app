@@ -29,7 +29,7 @@ function generateOGHtml(ballot) {
   const yellowVotes = ballot.votes?.filter(v => v.color === 'yellow').length || 0;
   const redVotes = ballot.votes?.filter(v => v.color === 'red').length || 0;
 
-  const description = `${voteCount} total vote${voteCount !== 1 ? 's' : ''} • 🟢 ${greenVotes} 🟡 ${yellowVotes} 🔴 ${redVotes}`;
+  const description = `${voteCount} total vote${voteCount !== 1 ? 's' : ''} • ✅ ${greenVotes} ⚠️ ${yellowVotes} ❌ ${redVotes}`;
 
   // Generate a simple visual representation for Slack/social
   const ballotUrl = `https://ballot.io/ballot/${ballot.id}`;
