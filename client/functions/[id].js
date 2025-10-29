@@ -16,6 +16,9 @@ function isBot(userAgent) {
     'TelegramBot',
     'Discordbot',
     'Slack-ImgProxy',
+    'Signal',
+    'iMessage',
+    'MessagesLinkPresentation', // Apple Messages link preview
   ];
 
   return botPatterns.some(pattern =>
