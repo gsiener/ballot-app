@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
-import { Label } from "./ui/label"
 import { Copy } from 'lucide-react'
 
 const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
@@ -140,32 +139,13 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
         </div>
 
         <div className="space-y-4 mb-8">
-          {ballot.votes.filter(v => v.comment).map((vote, index) => (
-            <div key={index} className="flex items-start space-x-3 p-3 bg-muted rounded">
-              <span className="text-2xl mt-1">
-                {vote.color === 'green' ? '✅' : vote.color === 'yellow' ? '⚠️' : '❌'}
-              </span>
-              <div className="flex-grow">
-                <p className="text-foreground">{vote.comment}</p>
-                <p className="text-sm text-muted-foreground">
-                  Created {new Date(vote.createdAt).toLocaleDateString()}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <div className="space-y-4">
-          <div>
-            <Label htmlFor="comment" className="text-lg font-semibold">Comment (optional)</Label>
-            <Textarea
-              id="comment"
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              placeholder="Add your comment here"
-              className="mt-2"
-            />
-          </div>
+          <Textarea
+            id="comment"
+            value={comment}
+            onChange={(e) => setComment(e.target.value)}
+            placeholder="Add an optional comment"
+            className="mb-2"
+          />
           <div className="grid grid-cols-3 gap-3">
             <Button
               onClick={() => handleVote('green')}
@@ -187,6 +167,25 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
             </Button>
           </div>
         </div>
+
+        {ballot.votes.filter(v => v.comment).length > 0 && (
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold">Comments</h2>
+            {ballot.votes.filter(v => v.comment).map((vote, index) => (
+            <div key={index} className="flex items-start space-x-3 p-3 bg-muted rounded">
+              <span className="text-2xl mt-1">
+                {vote.color === 'green' ? '✅' : vote.color === 'yellow' ? '⚠️' : '❌'}
+              </span>
+              <div className="flex-grow">
+                <p className="text-foreground">{vote.comment}</p>
+                <p className="text-sm text-muted-foreground">
+                  Created {new Date(vote.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+            </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )
