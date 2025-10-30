@@ -61,6 +61,7 @@ export function BallotList() {
       setBallots([newBallot, ...ballots])
       setNewBallotQuestion('')
       setIsPrivate(false)
+      navigate(`/${newBallot.id}`)
     } catch (error) {
       console.error('Error creating ballot:', error)
     }
