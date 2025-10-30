@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useDashboards } from '../hooks/useDashboards'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { ArrowLeft, Plus, X, ExternalLink, Pencil } from 'lucide-react'
+import { ArrowLeft, Plus, X, Pencil } from 'lucide-react'
 
 const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
 
@@ -223,32 +223,28 @@ export function DashboardDetailPage() {
             >
               <div className="flex items-start justify-between mb-3">
                 <div className="flex-grow pr-4">
-                  <h3 className="text-lg font-semibold text-foreground mb-1">
-                    {ballot.question}
+                  <h3 className="text-lg font-semibold mb-1">
+                    <a
+                      href={`/${ballot.id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-foreground hover:text-red-500 hover:underline transition-colors"
+                    >
+                      {ballot.question}
+                    </a>
                   </h3>
                   <p className="text-sm text-muted-foreground">
                     {ballot.votes.length} votes • {countComments(ballot)} comments
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(`/${ballot.id}`, '_blank')}
-                    className="flex items-center gap-1"
-                  >
-                    <ExternalLink className="h-3 w-3" />
-                    View
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleRemoveBallot(ballot.id)}
-                    className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleRemoveBallot(ballot.id)}
+                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                >
+                  <X className="h-4 w-4" />
+                </Button>
               </div>
 
               <div className="flex items-center gap-6">

@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
-import { RadioGroup, RadioGroupItem } from "./ui/radio-group"
 import { Label } from "./ui/label"
 import { Copy } from 'lucide-react'
 
@@ -27,7 +26,7 @@ interface BallotDetailProps {
 
 export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
   const [ballot, setBallot] = useState<Ballot | null>(null)
-  const [newVote, setNewVote] = useState<Vote>({ color: 'green', comment: '', createdAt: '' })
+  const [comment, setComment] = useState('')
   const [loading, setLoading] = useState(true)
   const [copyPressed, setCopyPressed] = useState(false)
 
@@ -48,12 +47,12 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
     }
   }
 
-  const handleVote = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleVote = async (color: 'green' | 'yellow' | 'red') => {
     if (!ballot) return
 
-    const updatedVote = {
-      ...newVote,
+    const newVote: Vote = {
+      color,
+      comment: comment.trim() || undefined,
       createdAt: new Date().toISOString()
     }
 
@@ -65,13 +64,13 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
         },
         body: JSON.stringify({
           ...ballot,
-          votes: [...ballot.votes, updatedVote]
+          votes: [...ballot.votes, newVote]
         }),
       })
       if (!response.ok) throw new Error('Failed to update ballot')
       const updatedBallot = await response.json()
       setBallot(updatedBallot)
-      setNewVote({ color: 'green', comment: '', createdAt: '' })
+      setComment('')
     } catch (error) {
       console.error('Error updating ballot:', error)
     }
@@ -156,43 +155,38 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
           ))}
         </div>
 
-        <form onSubmit={handleVote} className="space-y-4">
-          <div>
-            <Label className="text-lg font-semibold">Your Vote</Label>
-            <RadioGroup
-              value={newVote.color}
-              onValueChange={(value) => setNewVote({ ...newVote, color: value as 'green' | 'yellow' | 'red' })}
-              className="flex space-x-4 mt-2"
-            >
-              {['green', 'yellow', 'red'].map((color) => (
-                <div key={color} className="flex items-center">
-                  <RadioGroupItem value={color} id={`vote-${color}`} className="sr-only" />
-                  <Label
-                    htmlFor={`vote-${color}`}
-                    className={`w-8 h-8 rounded-full border-2 ${color === 'green' ? 'border-green-500' : color === 'yellow' ? 'border-yellow-500' : 'border-red-500'} flex items-center justify-center cursor-pointer`}
-                  >
-                    {newVote.color === color && (
-                      <div className={`w-4 h-4 rounded-full ${color === 'green' ? 'bg-green-500' : color === 'yellow' ? 'bg-yellow-500' : 'bg-red-500'}`}></div>
-                    )}
-                  </Label>
-                </div>
-              ))}
-            </RadioGroup>
-          </div>
+        <div className="space-y-4">
           <div>
             <Label htmlFor="comment" className="text-lg font-semibold">Comment (optional)</Label>
             <Textarea
               id="comment"
-              value={newVote.comment}
-              onChange={(e) => setNewVote({ ...newVote, comment: e.target.value })}
+              value={comment}
+              onChange={(e) => setComment(e.target.value)}
               placeholder="Add your comment here"
               className="mt-2"
             />
           </div>
-          <Button type="submit" className="w-full bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700">
-            Vote Now
-          </Button>
-        </form>
+          <div className="grid grid-cols-3 gap-3">
+            <Button
+              onClick={() => handleVote('green')}
+              className="w-full h-12 bg-green-500 hover:bg-green-600 text-white dark:bg-green-600 dark:hover:bg-green-700"
+            >
+              ✅ Vote Green
+            </Button>
+            <Button
+              onClick={() => handleVote('yellow')}
+              className="w-full h-12 bg-yellow-500 hover:bg-yellow-600 text-white dark:bg-yellow-600 dark:hover:bg-yellow-700"
+            >
+              ⚠️ Vote Yellow
+            </Button>
+            <Button
+              onClick={() => handleVote('red')}
+              className="w-full h-12 bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700"
+            >
+              ❌ Vote Red
+            </Button>
+          </div>
+        </div>
       </div>
     </div>
   )
