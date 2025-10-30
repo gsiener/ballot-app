@@ -102,13 +102,13 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
 
   return (
     <div className="container mx-auto p-4 max-w-3xl">
-      <div className="bg-white shadow-md rounded-lg p-6">
+      <div className="bg-card text-card-foreground shadow-md rounded-lg p-6 border border-border">
         <h1 className="text-3xl font-bold mb-2">{ballot.question}</h1>
-        <div className="text-sm text-gray-600 mb-4">
+        <div className="text-sm text-muted-foreground mb-4">
           <div className="flex items-center gap-2 mb-1">
             <a
               href={`${window.location.origin}/${ballot.id}`}
-              className="font-mono text-blue-600 flex-grow hover:underline"
+              className="font-mono text-primary flex-grow hover:underline"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -122,14 +122,14 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
                 await navigator.clipboard.writeText(`${window.location.origin}/${ballot.id}`)
                 setTimeout(() => setCopyPressed(false), 150)
               }}
-              className={`h-6 w-6 p-0 transition-all duration-150 ${copyPressed ? 'scale-95 bg-gray-100' : ''}`}
+              className={`h-6 w-6 p-0 transition-all duration-150 ${copyPressed ? 'scale-95 bg-muted' : ''}`}
             >
               <Copy className="h-3 w-3" />
             </Button>
           </div>
           <p>Created {new Date(ballot.createdAt).toLocaleDateString()}</p>
         </div>
-        
+
         <div className="flex justify-center space-x-8 mb-8">
           {['green', 'yellow', 'red'].map((color) => (
             <div key={color} className="text-center">
@@ -142,13 +142,13 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
 
         <div className="space-y-4 mb-8">
           {ballot.votes.filter(v => v.comment).map((vote, index) => (
-            <div key={index} className="flex items-start space-x-3 p-3 bg-gray-50 rounded">
+            <div key={index} className="flex items-start space-x-3 p-3 bg-muted rounded">
               <span className="text-2xl mt-1">
                 {vote.color === 'green' ? '✅' : vote.color === 'yellow' ? '⚠️' : '❌'}
               </span>
               <div className="flex-grow">
-                <p className="text-gray-800">{vote.comment}</p>
-                <p className="text-sm text-gray-600">
+                <p className="text-foreground">{vote.comment}</p>
+                <p className="text-sm text-muted-foreground">
                   Created {new Date(vote.createdAt).toLocaleDateString()}
                 </p>
               </div>
@@ -159,8 +159,8 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
         <form onSubmit={handleVote} className="space-y-4">
           <div>
             <Label className="text-lg font-semibold">Your Vote</Label>
-            <RadioGroup 
-              value={newVote.color} 
+            <RadioGroup
+              value={newVote.color}
               onValueChange={(value) => setNewVote({ ...newVote, color: value as 'green' | 'yellow' | 'red' })}
               className="flex space-x-4 mt-2"
             >
@@ -189,7 +189,7 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
               className="mt-2"
             />
           </div>
-          <Button type="submit" className="w-full bg-red-500 hover:bg-red-600 text-white">
+          <Button type="submit" className="w-full bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700">
             Vote Now
           </Button>
         </form>

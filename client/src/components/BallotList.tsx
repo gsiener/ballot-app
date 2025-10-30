@@ -85,7 +85,7 @@ export function BallotList() {
 
   return (
     <div className="container mx-auto p-4 max-w-3xl">
-      <div className="mb-6 p-4 bg-white rounded-md shadow-sm">
+      <div className="mb-6 p-4 bg-card text-card-foreground rounded-md shadow-sm border border-border">
         <h1 className="text-xl mb-4">Create a ballot by asking a question you want feedback to...</h1>
         <form onSubmit={createBallot} className="space-y-3">
           <div className="flex gap-2">
@@ -96,7 +96,7 @@ export function BallotList() {
               placeholder="Enter your ballot question"
               className="flex-grow"
             />
-            <Button type="submit" className="bg-red-500 hover:bg-red-600 text-white">
+            <Button type="submit" className="bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700">
               Create Ballot
             </Button>
           </div>
@@ -106,24 +106,24 @@ export function BallotList() {
               id="private-checkbox"
               checked={isPrivate}
               onChange={(e) => setIsPrivate(e.target.checked)}
-              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500"
+              className="w-4 h-4 text-blue-600 rounded focus:ring-2 focus:ring-blue-500 dark:text-blue-400"
             />
-            <label htmlFor="private-checkbox" className="text-sm text-gray-700 cursor-pointer">
+            <label htmlFor="private-checkbox" className="text-sm text-muted-foreground cursor-pointer">
               Make this ballot private (accessible by link only, not listed publicly)
             </label>
           </div>
         </form>
       </div>
-      
+
       <div className="space-y-4">
         {ballots.map(ballot => (
           <div
             key={ballot.id}
-            className="bg-white border rounded-md p-4 hover:shadow-md transition-shadow cursor-pointer"
+            className="bg-card text-card-foreground border border-border rounded-md p-4 hover:shadow-md transition-shadow cursor-pointer"
             onClick={() => navigate(`/${ballot.id}`)}
           >
-            <h2 className="text-lg font-semibold text-blue-600 mb-1">{ballot.question}</h2>
-            <p className="text-sm text-gray-600 mb-2">
+            <h2 className="text-lg font-semibold text-primary mb-1">{ballot.question}</h2>
+            <p className="text-sm text-muted-foreground mb-2">
               {ballot.votes.length} votes and {countComments(ballot)} comments
             </p>
             <div className="flex items-center space-x-4">
@@ -143,9 +143,9 @@ export function BallotList() {
           </div>
         ))}
       </div>
-      
+
       {ballots.length === 0 && (
-        <div className="text-center text-gray-600 mt-8 bg-white p-8 rounded-md">
+        <div className="text-center text-muted-foreground mt-8 bg-card text-card-foreground p-8 rounded-md border border-border">
           <p>No ballots created yet. Be the first to create one!</p>
         </div>
       )}

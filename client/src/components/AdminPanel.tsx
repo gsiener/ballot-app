@@ -153,10 +153,10 @@ export function AdminPanel() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <Shield className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-          <p className="text-gray-600">Loading admin panel...</p>
+          <Shield className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+          <p className="text-muted-foreground">Loading admin panel...</p>
         </div>
       </div>
     )
@@ -164,14 +164,14 @@ export function AdminPanel() {
 
   if (!adminKey) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
-          <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-500" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-4">
+          <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-500 dark:text-red-400" />
+          <h1 className="text-2xl font-bold text-foreground mb-2">Access Denied</h1>
+          <p className="text-muted-foreground mb-4">
             Admin access requires a valid authentication key in the URL.
           </p>
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Contact the administrator for access credentials.
           </p>
         </div>
@@ -181,11 +181,11 @@ export function AdminPanel() {
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center max-w-md mx-auto p-6">
-          <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-500" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Authentication Failed</h1>
-          <p className="text-gray-600 mb-4">{error || 'Invalid admin credentials'}</p>
+          <AlertTriangle className="w-16 h-16 mx-auto mb-4 text-red-500 dark:text-red-400" />
+          <h1 className="text-2xl font-bold text-foreground mb-2">Authentication Failed</h1>
+          <p className="text-muted-foreground mb-4">{error || 'Invalid admin credentials'}</p>
           <Button onClick={() => window.location.reload()} variant="outline">
             Try Again
           </Button>
@@ -195,21 +195,21 @@ export function AdminPanel() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto p-4 max-w-6xl">
         {/* Header */}
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+        <div className="bg-card text-card-foreground rounded-lg shadow-sm p-6 mb-6 border border-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Shield className="w-8 h-8 text-blue-600" />
+              <Shield className="w-8 h-8 text-primary" />
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Admin Panel</h1>
-                <p className="text-gray-600">Manage ballot data and system administration</p>
+                <h1 className="text-2xl font-bold text-foreground">Admin Panel</h1>
+                <p className="text-muted-foreground">Manage ballot data and system administration</p>
               </div>
             </div>
             <div className="text-right">
-              <p className="text-sm text-green-600 font-medium">✓ Authenticated</p>
-              <p className="text-xs text-gray-500">{ballots.length} ballots total</p>
+              <p className="text-sm text-green-600 dark:text-green-400 font-medium">✓ Authenticated</p>
+              <p className="text-xs text-muted-foreground">{ballots.length} ballots total</p>
             </div>
           </div>
         </div>
@@ -217,27 +217,27 @@ export function AdminPanel() {
         {/* Ballots List */}
         <div className="space-y-4">
           {ballots.length === 0 ? (
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-              <p className="text-gray-500">No ballots found</p>
+            <div className="bg-card text-card-foreground rounded-lg shadow-sm p-8 text-center border border-border">
+              <p className="text-muted-foreground">No ballots found</p>
             </div>
           ) : (
             ballots.map(ballot => (
-              <div key={ballot.id} className="bg-white rounded-lg shadow-sm p-6">
+              <div key={ballot.id} className="bg-card text-card-foreground rounded-lg shadow-sm p-6 border border-border">
                 <div className="flex items-start justify-between">
                   <div className="flex-grow">
                     <div className="flex items-center gap-2 mb-2">
-                      <h3 className="text-lg font-semibold text-gray-900">
+                      <h3 className="text-lg font-semibold text-foreground">
                         {ballot.question}
                       </h3>
                       {ballot.isPrivate && (
-                        <div className="flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-medium">
+                        <div className="flex items-center gap-1 px-2 py-1 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded text-xs font-medium">
                           <Lock className="w-3 h-3" />
                           <span>Private</span>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex items-center gap-6 text-sm text-gray-600 mb-4">
+                    <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
                       <div className="flex items-center gap-1">
                         <Eye className="w-4 h-4" />
                         <span>{ballot.voteCount} votes</span>
@@ -272,9 +272,9 @@ export function AdminPanel() {
                       </div>
                     </div>
 
-                    <p className="text-xs text-gray-500 font-mono">ID: {ballot.id}</p>
+                    <p className="text-xs text-muted-foreground font-mono">ID: {ballot.id}</p>
                   </div>
-                  
+
                   <div className="flex items-center gap-2 ml-4">
                     <Button
                       variant="outline"
@@ -299,7 +299,7 @@ export function AdminPanel() {
                       variant="outline"
                       size="sm"
                       onClick={() => window.open(`/${ballot.id}`, '_blank')}
-                      className="text-blue-600 hover:text-blue-700"
+                      className="text-primary"
                     >
                       View
                     </Button>
@@ -321,7 +321,7 @@ export function AdminPanel() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 text-center text-xs text-gray-500">
+        <div className="mt-8 text-center text-xs text-muted-foreground">
           <p>⚠️ This is a secure admin interface. All actions are logged.</p>
         </div>
       </div>
