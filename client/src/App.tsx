@@ -3,6 +3,8 @@ import { BallotList } from './components/BallotList'
 import { BallotDetailPage } from './components/BallotDetailPage'
 import { AdminPanel } from './components/AdminPanel'
 import { ThemeToggle } from './components/ThemeToggle'
+import { DashboardsPage } from './pages/DashboardsPage'
+import { DashboardDetailPage } from './pages/DashboardDetailPage'
 
 function App() {
   return (
@@ -16,6 +18,8 @@ function App() {
         <Routes>
           <Route path="/" element={<BallotList />} />
           <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/dashboards" element={<DashboardsPage />} />
+          <Route path="/dashboards/:id" element={<DashboardDetailPage />} />
           <Route path="/ballot/:id" element={<BallotDetailPage />} />
           <Route path="/:id" element={<BallotDetailPage />} />
         </Routes>
