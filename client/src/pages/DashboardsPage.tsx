@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useDashboards } from '../hooks/useDashboards'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
-import { Trash2, Eye, Plus } from 'lucide-react'
+import { Trash2, Plus } from 'lucide-react'
 
 export function DashboardsPage() {
   const navigate = useNavigate()
@@ -132,8 +132,13 @@ export function DashboardsPage() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex-grow">
-                  <h2 className="text-xl font-semibold text-foreground mb-2">
-                    {dashboard.name}
+                  <h2 className="text-xl font-semibold mb-2">
+                    <a
+                      href={`/dashboards/${dashboard.id}`}
+                      className="text-foreground hover:text-red-500 hover:underline transition-colors"
+                    >
+                      {dashboard.name}
+                    </a>
                   </h2>
                   <div className="flex items-center gap-4 text-sm text-muted-foreground">
                     <span>
@@ -143,26 +148,15 @@ export function DashboardsPage() {
                     <span>Updated {formatDate(dashboard.updatedAt)}</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => navigate(`/dashboards/${dashboard.id}`)}
-                    className="flex items-center gap-1"
-                  >
-                    <Eye className="h-4 w-4" />
-                    View
-                  </Button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => handleDelete(dashboard.id, dashboard.name)}
-                    className="flex items-center gap-1"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete
-                  </Button>
-                </div>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => handleDelete(dashboard.id, dashboard.name)}
+                  className="flex items-center gap-1"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
               </div>
             </div>
           ))}
