@@ -20,14 +20,24 @@ type AdminBallot = {
   isPrivate?: boolean
 }
 
+type Dashboard = {
+  id: string
+  name: string
+  ballotIds: string[]
+  createdAt: string
+  updatedAt: string
+}
+
 export function AdminPanel() {
   const [searchParams] = useSearchParams()
   const [ballots, setBallots] = useState<AdminBallot[]>([])
+  const [dashboards, setDashboards] = useState<Dashboard[]>([])
   const [loading, setLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [deletingDashboard, setDeletingDashboard] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  
+
   const adminKey = searchParams.get('key')
 
   useEffect(() => {
@@ -37,6 +47,7 @@ export function AdminPanel() {
     }
 
     fetchAdminBallots()
+    fetchDashboards()
   }, [adminKey])
 
   useEffect(() => {
@@ -147,6 +158,53 @@ export function AdminPanel() {
     }
   }
 
+  const fetchDashboards = async () => {
+    try {
+      const response = await fetch(`${API_URL}/dashboards`)
+      if (!response.ok) throw new Error('Failed to fetch dashboards')
+      const data = await response.json()
+      setDashboards(data)
+    } catch (error) {
+      console.error('Error fetching dashboards:', error)
+    }
+  }
+
+  const handleDeleteDashboard = async (dashboardId: string, dashboardName: string) => {
+    if (!adminKey) return
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the dashboard "${dashboardName}"?\n\nThis action cannot be undone.`
+    )
+
+    if (!confirmDelete) return
+
+    setDeletingDashboard(dashboardId)
+
+    try {
+      const response = await fetch(`${API_URL}/dashboards/${dashboardId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) throw new Error('Failed to delete dashboard')
+
+      // Remove from local state
+      setDashboards(prev => prev.filter(dashboard => dashboard.id !== dashboardId))
+
+      // Show success message briefly
+      const deletedMessage = document.createElement('div')
+      deletedMessage.textContent = 'Dashboard deleted successfully'
+      deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
+      document.body.appendChild(deletedMessage)
+      setTimeout(() => document.body.removeChild(deletedMessage), 3000)
+
+    } catch (error) {
+      console.error('Error deleting dashboard:', error)
+      alert('Failed to delete dashboard. Please try again.')
+    } finally {
+      setDeletingDashboard(null)
+    }
+  }
+
   const countVotesByColor = (ballot: AdminBallot, color: 'green' | 'yellow' | 'red') => {
     return ballot.votes.filter(vote => vote.color === color).length
   }
@@ -209,13 +267,14 @@ export function AdminPanel() {
             </div>
             <div className="text-right">
               <p className="text-sm text-green-600 dark:text-green-400 font-medium">✓ Authenticated</p>
-              <p className="text-xs text-muted-foreground">{ballots.length} ballots total</p>
+              <p className="text-xs text-muted-foreground">{ballots.length} ballots • {dashboards.length} dashboards</p>
             </div>
           </div>
         </div>
 
-        {/* Ballots List */}
-        <div className="space-y-4">
+        {/* Ballots Section */}
+        <h2 className="text-xl font-bold text-foreground mb-4">Ballots</h2>
+        <div className="space-y-4 mb-8">
           {ballots.length === 0 ? (
             <div className="bg-card text-card-foreground rounded-lg shadow-sm p-8 text-center border border-border">
               <p className="text-muted-foreground">No ballots found</p>
@@ -312,6 +371,61 @@ export function AdminPanel() {
                     >
                       <Trash2 className="w-4 h-4" />
                       {deleting === ballot.id ? 'Deleting...' : 'Delete'}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Dashboards Section */}
+        <h2 className="text-xl font-bold text-foreground mb-4">Dashboards</h2>
+        <div className="space-y-4 mb-8">
+          {dashboards.length === 0 ? (
+            <div className="bg-card text-card-foreground rounded-lg shadow-sm p-8 text-center border border-border">
+              <p className="text-muted-foreground">No dashboards found</p>
+            </div>
+          ) : (
+            dashboards.map(dashboard => (
+              <div key={dashboard.id} className="bg-card text-card-foreground rounded-lg shadow-sm p-6 border border-border">
+                <div className="flex items-start justify-between">
+                  <div className="flex-grow">
+                    <h3 className="text-lg font-semibold text-foreground mb-2">
+                      {dashboard.name}
+                    </h3>
+                    <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
+                      <div>
+                        {dashboard.ballotIds.length} ballot{dashboard.ballotIds.length !== 1 ? 's' : ''}
+                      </div>
+                      <div>
+                        Created {new Date(dashboard.createdAt).toLocaleDateString()}
+                      </div>
+                      <div>
+                        Updated {new Date(dashboard.updatedAt).toLocaleDateString()}
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground font-mono">ID: {dashboard.id}</p>
+                  </div>
+
+                  <div className="flex items-center gap-2 ml-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(`/dashboards/${dashboard.id}`, '_blank')}
+                      className="text-primary"
+                    >
+                      View
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() => handleDeleteDashboard(dashboard.id, dashboard.name)}
+                      disabled={deletingDashboard === dashboard.id}
+                      className="flex items-center gap-1"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      {deletingDashboard === dashboard.id ? 'Deleting...' : 'Delete'}
                     </Button>
                   </div>
                 </div>

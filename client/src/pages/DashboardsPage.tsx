@@ -61,7 +61,7 @@ export function DashboardsPage() {
     <div className="container mx-auto p-4 max-w-4xl">
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">My Dashboards</h1>
+          <h1 className="text-3xl font-bold text-foreground">Ballot Dashboards</h1>
           <p className="text-muted-foreground mt-1">
             Organize and track multiple ballots in one place
           </p>
