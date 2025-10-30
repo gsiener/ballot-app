@@ -37,8 +37,7 @@ Ballot App is a real-time voting platform that allows users to create polls with
 
 ## Live Demo
 
-- **Frontend**: https://d9cc5b2a.ballot-app-client.pages.dev
-- **API**: https://ballot-app-server.siener.workers.dev
+- https://ballot.io
 
 ## Project Structure
 
