@@ -11,19 +11,29 @@ export function DashboardsPage() {
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newDashboardName, setNewDashboardName] = useState('')
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newDashboardName.trim()) return
 
-    const dashboard = createDashboard(newDashboardName)
-    setNewDashboardName('')
-    setShowCreateForm(false)
-    navigate(`/dashboards/${dashboard.id}`)
+    try {
+      const dashboard = await createDashboard(newDashboardName)
+      setNewDashboardName('')
+      setShowCreateForm(false)
+      navigate(`/dashboards/${dashboard.id}`)
+    } catch (error) {
+      console.error('Failed to create dashboard:', error)
+      alert('Failed to create dashboard. Please try again.')
+    }
   }
 
-  const handleDelete = (id: string, name: string) => {
+  const handleDelete = async (id: string, name: string) => {
     if (window.confirm(`Are you sure you want to delete "${name}"? This cannot be undone.`)) {
-      deleteDashboard(id)
+      try {
+        await deleteDashboard(id)
+      } catch (error) {
+        console.error('Failed to delete dashboard:', error)
+        alert('Failed to delete dashboard. Please try again.')
+      }
     }
   }
 

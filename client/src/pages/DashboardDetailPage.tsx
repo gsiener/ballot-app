@@ -81,24 +81,34 @@ export function DashboardDetailPage() {
         return
       }
 
-      addBallot(id, ballotId)
+      await addBallot(id, ballotId)
       setNewBallotInput('')
     } catch (error) {
       alert('Failed to add ballot. Please try again.')
     }
   }
 
-  const handleRemoveBallot = (ballotId: string) => {
+  const handleRemoveBallot = async (ballotId: string) => {
     if (!id) return
     if (window.confirm('Remove this ballot from the dashboard?')) {
-      removeBallot(id, ballotId)
+      try {
+        await removeBallot(id, ballotId)
+      } catch (error) {
+        console.error('Failed to remove ballot:', error)
+        alert('Failed to remove ballot. Please try again.')
+      }
     }
   }
 
-  const handleSaveName = () => {
+  const handleSaveName = async () => {
     if (!id || !editedName.trim()) return
-    updateDashboard(id, { name: editedName.trim() })
-    setIsEditing(false)
+    try {
+      await updateDashboard(id, { name: editedName.trim() })
+      setIsEditing(false)
+    } catch (error) {
+      console.error('Failed to update dashboard name:', error)
+      alert('Failed to update dashboard name. Please try again.')
+    }
   }
 
   const countVotes = (ballot: Ballot, color: 'green' | 'yellow' | 'red') => {

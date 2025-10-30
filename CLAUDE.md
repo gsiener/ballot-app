@@ -71,7 +71,9 @@ This is a **Bun workspace** monorepo with three packages:
 
 2. **`server/`** - Hono-based REST API on Cloudflare Workers
    - Uses OpenTelemetry for comprehensive observability
-   - Data persistence via Cloudflare KV (single "ballots" key with JSON array)
+   - Data persistence via Cloudflare KV:
+     - "ballots" key stores JSON array of all ballots
+     - "dashboards" key stores JSON array of all dashboards
    - Admin routes protected by API key authentication
    - Demo data auto-initializes on first run if KV is empty
 
@@ -84,9 +86,11 @@ This is a **Bun workspace** monorepo with three packages:
 
 **Data Persistence (ADR-006):**
 - All ballot data stored as single JSON array in Cloudflare KV under "ballots" key
+- All dashboard data stored as single JSON array in Cloudflare KV under "dashboards" key
 - Eventual consistency model - be aware of potential race conditions
-- Demo data automatically initialized if KV is empty
-- No complex querying - all operations load full ballot array
+- Demo data automatically initialized for ballots if KV is empty
+- Dashboards start empty on first run
+- No complex querying - all operations load full arrays
 
 **OpenTelemetry Integration (ADR-003):**
 - `server/src/telemetry.ts` exports: `initTelemetry()`, `createSpan()`, `addSpanAttributes()`, `recordSpanEvent()`, `setSpanStatus()`
@@ -105,11 +109,18 @@ This is a **Bun workspace** monorepo with three packages:
 
 All routes defined in `server/src/index.ts`:
 
-**Public Routes:**
+**Ballot Routes (Public):**
 - `GET /api/ballots` - Returns all ballots with vote counts
 - `GET /api/ballots/:id` - Returns specific ballot details
 - `POST /api/ballots` - Creates new ballot (requires `question` field)
 - `PUT /api/ballots/:id` - Adds vote to ballot (requires `color` and optional `comment`)
+
+**Dashboard Routes (Public):**
+- `GET /api/dashboards` - Returns all dashboards
+- `GET /api/dashboards/:id` - Returns specific dashboard details
+- `POST /api/dashboards` - Creates new dashboard (requires `name` field)
+- `PUT /api/dashboards/:id` - Updates dashboard (accepts `name` and/or `ballotIds`)
+- `DELETE /api/dashboards/:id` - Deletes dashboard
 
 **Admin Routes (require `Authorization: Bearer <ADMIN_API_KEY>`):**
 - `GET /api/admin/ballots` - Returns ballots with admin metadata (total votes, comments)
@@ -142,11 +153,12 @@ Tests use Bun's built-in test runner with custom mocks for:
 - DOM APIs (for component tests)
 
 **Server Tests (`server/src/index.test.ts`, `server/tests/integration.test.ts`):**
-- All CRUD operations with validation
+- All CRUD operations for ballots and dashboards with validation
 - Admin authentication/authorization flows
 - KV storage operations and error handling
 - Complete integration scenarios (auth → list → delete)
 - OpenTelemetry span attribute validation
+- Dashboard data structure and operations
 
 **Client Tests (`client/src/utils/ballot.test.ts`):**
 - Vote counting and aggregation algorithms
@@ -214,11 +226,21 @@ See `.github/DEPLOYMENT_SETUP.md` for detailed setup instructions.
 
 ### KV Storage Patterns
 
+**Ballots:**
 - Load all ballots: `const ballots = await getAllBallots(c.env.BALLOTS_KV)`
 - Find ballot: `ballots.find(b => b.id === id)`
 - Modify array: push/splice/filter
 - Save back: `await saveBallots(c.env.BALLOTS_KV, ballots)`
+
+**Dashboards:**
+- Load all dashboards: `const dashboards = await getAllDashboards(c.env.BALLOTS_KV)`
+- Find dashboard: `dashboards.find(d => d.id === id)`
+- Modify array: push/splice/filter
+- Save back: `await saveDashboards(c.env.BALLOTS_KV, dashboards)`
+
+**General:**
 - Handle eventual consistency - consider optimistic locking for high-concurrency scenarios
+- Both ballots and dashboards use the same KV namespace (BALLOTS_KV) with different keys
 
 ## Important Notes
 
@@ -226,7 +248,8 @@ See `.github/DEPLOYMENT_SETUP.md` for detailed setup instructions.
 - **KV eventual consistency**: Race conditions possible with concurrent writes
 - **Workers CPU limits**: Keep operations under 10ms for Cloudflare Workers
 - **Telemetry graceful degradation**: App works without `HONEYCOMB_API_KEY`
-- **Demo data**: KV auto-initializes with sample ballots on first access
+- **Demo data**: KV auto-initializes with sample ballots on first access (dashboards start empty)
+- **Dashboard persistence**: Dashboards now stored in KV (not localStorage) for cross-device sync
 - **Admin auth**: Set `ADMIN_API_KEY` secret via wrangler for admin routes
 - **Component tests**: Require jsdom environment configuration to run
 

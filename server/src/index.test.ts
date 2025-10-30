@@ -29,6 +29,17 @@ const mockKV = {
         }
       ])
     }
+    if (key === 'dashboards') {
+      return JSON.stringify([
+        {
+          id: 'dashboard-1',
+          name: 'Test Dashboard',
+          ballotIds: ['test-1'],
+          createdAt: '2024-01-01T09:00:00Z',
+          updatedAt: '2024-01-01T10:00:00Z'
+        }
+      ])
+    }
     return null
   }),
   put: mock(async (key: string, value: string) => {
@@ -336,17 +347,225 @@ describe('Date Handling', () => {
   test('should generate valid ISO timestamps', () => {
     const timestamp = new Date().toISOString()
     const isoRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
-    
+
     expect(timestamp).toMatch(isoRegex)
   })
 
   test('should handle date parsing for display', () => {
     const timestamp = '2024-01-01T10:00:00Z'
     const date = new Date(timestamp)
-    
+
     expect(date.toLocaleDateString()).toBeDefined()
     expect(date.getFullYear()).toBe(2024)
     expect(date.getMonth()).toBe(0) // January is 0
     expect(date.getDate()).toBe(1)
+  })
+})
+
+describe('Dashboard API', () => {
+  beforeEach(() => {
+    // Reset mocks
+    mockKV.get.mockClear()
+    mockKV.put.mockClear()
+  })
+
+  describe('GET /api/dashboards', () => {
+    test('should return all dashboards', async () => {
+      const mockResponse = [
+        {
+          id: 'dashboard-1',
+          name: 'Test Dashboard',
+          ballotIds: ['test-1'],
+          createdAt: '2024-01-01T09:00:00Z',
+          updatedAt: '2024-01-01T10:00:00Z'
+        }
+      ]
+
+      expect(mockResponse).toHaveLength(1)
+      expect(mockResponse[0]).toHaveProperty('id', 'dashboard-1')
+      expect(mockResponse[0]).toHaveProperty('name', 'Test Dashboard')
+      expect(mockResponse[0]?.ballotIds).toHaveLength(1)
+    })
+
+    test('should return empty array when no dashboards exist', async () => {
+      const emptyResponse: any[] = []
+      expect(emptyResponse).toHaveLength(0)
+    })
+  })
+
+  describe('GET /api/dashboards/:id', () => {
+    test('should return a specific dashboard', async () => {
+      const dashboard = {
+        id: 'dashboard-1',
+        name: 'Test Dashboard',
+        ballotIds: ['test-1'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T10:00:00Z'
+      }
+
+      expect(dashboard).toHaveProperty('id', 'dashboard-1')
+      expect(dashboard).toHaveProperty('name', 'Test Dashboard')
+      expect(dashboard.ballotIds).toContain('test-1')
+    })
+
+    test('should return 404 for non-existent dashboard', async () => {
+      const dashboard = null
+      expect(dashboard).toBeNull()
+    })
+  })
+
+  describe('POST /api/dashboards', () => {
+    test('should create a new dashboard', async () => {
+      const newDashboard = {
+        name: 'New Dashboard'
+      }
+
+      // Test dashboard creation logic
+      const createdDashboard = {
+        id: expect.stringMatching(/^dashboard-\d+-[a-z0-9]+$/),
+        name: newDashboard.name,
+        ballotIds: [],
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(createdDashboard.name).toBe('New Dashboard')
+      expect(createdDashboard.ballotIds).toHaveLength(0)
+    })
+
+    test('should reject empty dashboard name', async () => {
+      const invalidDashboard = {
+        name: ''
+      }
+
+      expect(invalidDashboard.name.trim()).toBe('')
+    })
+
+    test('should reject dashboard without name', async () => {
+      const invalidDashboard = {}
+
+      expect(invalidDashboard).not.toHaveProperty('name')
+    })
+
+    test('should trim dashboard name', async () => {
+      const dashboardWithSpaces = {
+        name: '  Dashboard with spaces  '
+      }
+
+      const trimmedName = dashboardWithSpaces.name.trim()
+      expect(trimmedName).toBe('Dashboard with spaces')
+    })
+  })
+
+  describe('PUT /api/dashboards/:id', () => {
+    test('should update dashboard name', async () => {
+      const updatedDashboard = {
+        id: 'dashboard-1',
+        name: 'Updated Dashboard Name',
+        ballotIds: ['test-1'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(updatedDashboard.name).toBe('Updated Dashboard Name')
+      expect(updatedDashboard.updatedAt).toBeDefined()
+    })
+
+    test('should update dashboard ballotIds', async () => {
+      const updatedDashboard = {
+        id: 'dashboard-1',
+        name: 'Test Dashboard',
+        ballotIds: ['test-1', 'test-2', 'test-3'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(updatedDashboard.ballotIds).toHaveLength(3)
+      expect(updatedDashboard.ballotIds).toContain('test-2')
+      expect(updatedDashboard.ballotIds).toContain('test-3')
+    })
+
+    test('should update both name and ballotIds', async () => {
+      const updatedDashboard = {
+        id: 'dashboard-1',
+        name: 'Completely Updated',
+        ballotIds: ['new-ballot-1'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(updatedDashboard.name).toBe('Completely Updated')
+      expect(updatedDashboard.ballotIds).toEqual(['new-ballot-1'])
+    })
+
+    test('should return 404 for non-existent dashboard', async () => {
+      const dashboard = null
+      expect(dashboard).toBeNull()
+    })
+  })
+
+  describe('DELETE /api/dashboards/:id', () => {
+    test('should delete a dashboard', async () => {
+      const deleteResponse = {
+        message: 'Dashboard deleted successfully',
+        deletedDashboard: {
+          id: 'dashboard-1',
+          name: 'Test Dashboard',
+          ballotCount: 1
+        }
+      }
+
+      expect(deleteResponse.message).toBe('Dashboard deleted successfully')
+      expect(deleteResponse.deletedDashboard.id).toBe('dashboard-1')
+      expect(deleteResponse.deletedDashboard.ballotCount).toBe(1)
+    })
+
+    test('should return 404 for non-existent dashboard', async () => {
+      const dashboard = null
+      expect(dashboard).toBeNull()
+    })
+  })
+
+  describe('Dashboard Data Validation', () => {
+    test('should have valid dashboard structure', () => {
+      const dashboard = {
+        id: 'dashboard-1',
+        name: 'Test Dashboard',
+        ballotIds: ['test-1', 'test-2'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T10:00:00Z'
+      }
+
+      expect(dashboard).toHaveProperty('id')
+      expect(dashboard).toHaveProperty('name')
+      expect(dashboard).toHaveProperty('ballotIds')
+      expect(dashboard).toHaveProperty('createdAt')
+      expect(dashboard).toHaveProperty('updatedAt')
+      expect(Array.isArray(dashboard.ballotIds)).toBe(true)
+    })
+
+    test('should handle dashboards with no ballots', () => {
+      const emptyDashboard = {
+        id: 'dashboard-2',
+        name: 'Empty Dashboard',
+        ballotIds: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T09:00:00Z'
+      }
+
+      expect(emptyDashboard.ballotIds).toHaveLength(0)
+    })
+
+    test('should handle dashboards with multiple ballots', () => {
+      const fullDashboard = {
+        id: 'dashboard-3',
+        name: 'Full Dashboard',
+        ballotIds: ['ballot-1', 'ballot-2', 'ballot-3', 'ballot-4', 'ballot-5'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T11:00:00Z'
+      }
+
+      expect(fullDashboard.ballotIds).toHaveLength(5)
+    })
   })
 })

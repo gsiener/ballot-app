@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { ApiResponse } from 'shared/dist'
+import type { ApiResponse, Dashboard } from 'shared/dist'
 import { initTelemetry, createSpan, addSpanAttributes, recordSpanEvent, setSpanStatus } from './telemetry'
 
 type Bindings = {
@@ -89,6 +89,30 @@ async function saveBallots(kv: KVNamespace, ballots: Ballot[]): Promise<void> {
     await kv.put('ballots', JSON.stringify(ballots))
   } catch (error) {
     console.error('Error saving ballots to KV:', error)
+  }
+}
+
+// Helper functions for Dashboard KV storage
+async function getAllDashboards(kv: KVNamespace): Promise<Dashboard[]> {
+  try {
+    const dashboardsJson = await kv.get('dashboards')
+    if (dashboardsJson) {
+      return JSON.parse(dashboardsJson)
+    }
+    // Return empty array if no dashboards exist
+    return []
+  } catch (error) {
+    console.error('Error getting dashboards from KV:', error)
+    return []
+  }
+}
+
+async function saveDashboards(kv: KVNamespace, dashboards: Dashboard[]): Promise<void> {
+  try {
+    await kv.put('dashboards', JSON.stringify(dashboards))
+  } catch (error) {
+    console.error('Error saving dashboards to KV:', error)
+    throw error
   }
 }
 
@@ -558,6 +582,248 @@ app.post('/api/admin/ballots/migrate', adminAuth, async (c) => {
       migratedCount: newBallots.length,
       duplicatesSkipped: incomingBallots.length - newBallots.length,
       totalCount: mergedBallots.length
+    })
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+// Dashboard endpoints
+app.get('/api/dashboards', async (c) => {
+  const span = createSpan('get_all_dashboards')
+
+  try {
+    const dashboards = await getAllDashboards(c.env.BALLOTS_KV)
+
+    // Sort by updatedAt descending (most recently updated first)
+    const sortedDashboards = dashboards.sort((a, b) =>
+      new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+    )
+
+    addSpanAttributes({
+      'dashboard.count': sortedDashboards.length,
+      'operation': 'get_all_dashboards'
+    })
+
+    recordSpanEvent('dashboards_retrieved', {
+      'dashboard.count': sortedDashboards.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(sortedDashboards)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.get('/api/dashboards/:id', async (c) => {
+  const span = createSpan('get_single_dashboard')
+  const id = c.req.param('id')
+
+  try {
+    addSpanAttributes({
+      'dashboard.id': id,
+      'operation': 'get_single_dashboard'
+    })
+
+    const dashboards = await getAllDashboards(c.env.BALLOTS_KV)
+    const dashboard = dashboards.find(d => d.id === id)
+
+    if (!dashboard) {
+      addSpanAttributes({
+        'dashboard.found': false
+      })
+      recordSpanEvent('dashboard_not_found', { 'dashboard.id': id })
+      setSpanStatus(span, false, 'Dashboard not found')
+      return c.json({ error: 'Dashboard not found' }, 404)
+    }
+
+    addSpanAttributes({
+      'dashboard.found': true,
+      'dashboard.ballot_count': dashboard.ballotIds.length
+    })
+
+    recordSpanEvent('dashboard_retrieved', {
+      'dashboard.id': id,
+      'dashboard.ballot_count': dashboard.ballotIds.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(dashboard)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.post('/api/dashboards', async (c) => {
+  const span = createSpan('create_dashboard')
+
+  try {
+    const { name } = await c.req.json()
+
+    addSpanAttributes({
+      'operation': 'create_dashboard',
+      'name.provided': !!name
+    })
+
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Dashboard name is required'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'missing_name' })
+      setSpanStatus(span, false, 'Dashboard name is required')
+      return c.json({ error: 'Dashboard name is required' }, 400)
+    }
+
+    const dashboards = await getAllDashboards(c.env.BALLOTS_KV)
+
+    const newDashboard: Dashboard = {
+      id: `dashboard-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      name: name.trim(),
+      ballotIds: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    dashboards.push(newDashboard)
+    await saveDashboards(c.env.BALLOTS_KV, dashboards)
+
+    addSpanAttributes({
+      'dashboard.id': newDashboard.id,
+      'dashboard.name_length': name.trim().length,
+      'dashboards.total_count': dashboards.length
+    })
+
+    recordSpanEvent('dashboard_created', {
+      'dashboard.id': newDashboard.id,
+      'dashboards.total_count': dashboards.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(newDashboard, 201)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.put('/api/dashboards/:id', async (c) => {
+  const span = createSpan('update_dashboard')
+  const id = c.req.param('id')
+
+  try {
+    const { name, ballotIds } = await c.req.json()
+
+    addSpanAttributes({
+      'dashboard.id': id,
+      'operation': 'update_dashboard'
+    })
+
+    const dashboards = await getAllDashboards(c.env.BALLOTS_KV)
+    const dashboardIndex = dashboards.findIndex(d => d.id === id)
+
+    if (dashboardIndex === -1) {
+      addSpanAttributes({
+        'dashboard.found': false
+      })
+      recordSpanEvent('dashboard_not_found', { 'dashboard.id': id })
+      setSpanStatus(span, false, 'Dashboard not found')
+      return c.json({ error: 'Dashboard not found' }, 404)
+    }
+
+    // Update fields if provided
+    const currentDashboard = dashboards[dashboardIndex]!
+    const updatedDashboard: Dashboard = {
+      ...currentDashboard,
+      name: name !== undefined && typeof name === 'string' ? name.trim() : currentDashboard.name,
+      ballotIds: Array.isArray(ballotIds) ? ballotIds : currentDashboard.ballotIds,
+      updatedAt: new Date().toISOString()
+    }
+
+    dashboards[dashboardIndex] = updatedDashboard
+    await saveDashboards(c.env.BALLOTS_KV, dashboards)
+
+    addSpanAttributes({
+      'dashboard.found': true,
+      'dashboard.ballot_count': updatedDashboard.ballotIds.length
+    })
+
+    recordSpanEvent('dashboard_updated', {
+      'dashboard.id': id,
+      'dashboard.ballot_count': updatedDashboard.ballotIds.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(updatedDashboard)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.delete('/api/dashboards/:id', async (c) => {
+  const span = createSpan('delete_dashboard')
+  const id = c.req.param('id')
+
+  try {
+    addSpanAttributes({
+      'dashboard.id': id,
+      'operation': 'delete_dashboard'
+    })
+
+    const dashboards = await getAllDashboards(c.env.BALLOTS_KV)
+    const dashboardIndex = dashboards.findIndex(d => d.id === id)
+
+    if (dashboardIndex === -1) {
+      addSpanAttributes({
+        'dashboard.found': false
+      })
+      recordSpanEvent('delete_failed', {
+        'dashboard.id': id,
+        'error': 'dashboard_not_found'
+      })
+      setSpanStatus(span, false, 'Dashboard not found')
+      return c.json({ error: 'Dashboard not found' }, 404)
+    }
+
+    const deletedDashboard = dashboards[dashboardIndex]!
+    dashboards.splice(dashboardIndex, 1)
+    await saveDashboards(c.env.BALLOTS_KV, dashboards)
+
+    addSpanAttributes({
+      'dashboard.found': true,
+      'dashboard.name': deletedDashboard.name,
+      'dashboard.ballot_count': deletedDashboard.ballotIds.length
+    })
+
+    recordSpanEvent('dashboard_deleted', {
+      'dashboard.id': id,
+      'dashboard.name': deletedDashboard.name,
+      'dashboard.ballot_count': deletedDashboard.ballotIds.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json({
+      message: 'Dashboard deleted successfully',
+      deletedDashboard: {
+        id: deletedDashboard.id,
+        name: deletedDashboard.name,
+        ballotCount: deletedDashboard.ballotIds.length
+      }
     })
   } catch (error) {
     setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
