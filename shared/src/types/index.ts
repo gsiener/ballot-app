@@ -10,3 +10,18 @@ export type Dashboard = {
   createdAt: string
   updatedAt: string
 }
+
+export type AttendanceResponse = {
+  name: string
+  attending: boolean
+  timestamp: string
+}
+
+export type Attendance = {
+  id: string
+  title: string
+  date: string
+  responses: AttendanceResponse[]
+  createdAt: string
+  updatedAt: string
+}

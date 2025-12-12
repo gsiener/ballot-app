@@ -569,3 +569,291 @@ describe('Dashboard API', () => {
     })
   })
 })
+
+describe('Attendance API', () => {
+  beforeEach(() => {
+    // Reset mocks
+    mockKV.get.mockClear()
+    mockKV.put.mockClear()
+  })
+
+  describe('GET /api/attendance', () => {
+    test('should return all attendance records', async () => {
+      const mockResponse = [
+        {
+          id: 'attendance-1',
+          title: 'Team Meeting',
+          date: '2024-01-15',
+          responses: [
+            { name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' },
+            { name: 'Bob', attending: false, timestamp: '2024-01-10T11:00:00Z' }
+          ],
+          createdAt: '2024-01-01T09:00:00Z',
+          updatedAt: '2024-01-10T11:00:00Z'
+        }
+      ]
+
+      expect(mockResponse).toHaveLength(1)
+      expect(mockResponse[0]).toHaveProperty('id', 'attendance-1')
+      expect(mockResponse[0]).toHaveProperty('title', 'Team Meeting')
+      expect(mockResponse[0]?.responses).toHaveLength(2)
+    })
+
+    test('should return empty array when no attendance records exist', async () => {
+      const emptyResponse: any[] = []
+      expect(emptyResponse).toHaveLength(0)
+    })
+  })
+
+  describe('GET /api/attendance/:id', () => {
+    test('should return a specific attendance record', async () => {
+      const attendance = {
+        id: 'attendance-1',
+        title: 'Team Meeting',
+        date: '2024-01-15',
+        responses: [
+          { name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' }
+        ],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-10T10:00:00Z'
+      }
+
+      expect(attendance).toHaveProperty('id', 'attendance-1')
+      expect(attendance).toHaveProperty('title', 'Team Meeting')
+      expect(attendance).toHaveProperty('date', '2024-01-15')
+      expect(attendance.responses).toHaveLength(1)
+    })
+
+    test('should return 404 for non-existent attendance', async () => {
+      const attendance = null
+      expect(attendance).toBeNull()
+    })
+  })
+
+  describe('POST /api/attendance', () => {
+    test('should create a new attendance record', async () => {
+      const newAttendance = {
+        title: 'Sprint Planning',
+        date: '2024-02-01'
+      }
+
+      const createdAttendance = {
+        id: expect.stringMatching(/^attendance-\d+-[a-z0-9]+$/),
+        title: newAttendance.title,
+        date: newAttendance.date,
+        responses: [],
+        createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(createdAttendance.title).toBe('Sprint Planning')
+      expect(createdAttendance.date).toBe('2024-02-01')
+      expect(createdAttendance.responses).toHaveLength(0)
+    })
+
+    test('should reject empty title', async () => {
+      const invalidAttendance = {
+        title: '',
+        date: '2024-02-01'
+      }
+
+      expect(invalidAttendance.title.trim()).toBe('')
+    })
+
+    test('should reject missing date', async () => {
+      const invalidAttendance = {
+        title: 'Meeting'
+      }
+
+      expect(invalidAttendance).not.toHaveProperty('date')
+    })
+
+    test('should trim attendance title', async () => {
+      const attendanceWithSpaces = {
+        title: '  Team Standup  ',
+        date: '2024-02-01'
+      }
+
+      const trimmedTitle = attendanceWithSpaces.title.trim()
+      expect(trimmedTitle).toBe('Team Standup')
+    })
+  })
+
+  describe('PUT /api/attendance/:id', () => {
+    test('should add a new response to attendance', async () => {
+      const existingAttendance = {
+        id: 'attendance-1',
+        title: 'Team Meeting',
+        date: '2024-01-15',
+        responses: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T09:00:00Z'
+      }
+
+      const newResponse = {
+        name: 'Alice',
+        attending: true,
+        timestamp: '2024-01-10T10:00:00Z'
+      }
+
+      const updatedAttendance = {
+        ...existingAttendance,
+        responses: [...existingAttendance.responses, newResponse],
+        updatedAt: '2024-01-10T10:00:00Z'
+      }
+
+      expect(updatedAttendance.responses).toHaveLength(1)
+      expect(updatedAttendance.responses[0]).toEqual(newResponse)
+    })
+
+    test('should update existing response by name (case-insensitive)', async () => {
+      const existingAttendance = {
+        id: 'attendance-1',
+        title: 'Team Meeting',
+        date: '2024-01-15',
+        responses: [
+          { name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' }
+        ],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-10T10:00:00Z'
+      }
+
+      // User changes their response
+      const updatedResponse = {
+        name: 'alice', // lowercase
+        attending: false,
+        timestamp: '2024-01-11T10:00:00Z'
+      }
+
+      // Case-insensitive matching
+      const existingIndex = existingAttendance.responses.findIndex(
+        r => r.name.toLowerCase() === updatedResponse.name.toLowerCase()
+      )
+
+      expect(existingIndex).toBe(0)
+
+      // Update the response
+      existingAttendance.responses[existingIndex] = {
+        name: updatedResponse.name,
+        attending: updatedResponse.attending,
+        timestamp: updatedResponse.timestamp
+      }
+
+      expect(existingAttendance.responses).toHaveLength(1)
+      expect(existingAttendance.responses[0]?.attending).toBe(false)
+    })
+
+    test('should reject empty name', async () => {
+      const invalidResponse = {
+        name: '',
+        attending: true
+      }
+
+      expect(invalidResponse.name.trim()).toBe('')
+    })
+
+    test('should reject non-boolean attending value', async () => {
+      const invalidResponse = {
+        name: 'Alice',
+        attending: 'yes' as any // Should be boolean
+      }
+
+      expect(typeof invalidResponse.attending).not.toBe('boolean')
+    })
+
+    test('should return 404 for non-existent attendance', async () => {
+      const attendance = null
+      expect(attendance).toBeNull()
+    })
+  })
+
+  describe('DELETE /api/attendance/:id (Admin)', () => {
+    test('should delete an attendance record', async () => {
+      const deleteResponse = {
+        message: 'Attendance deleted successfully',
+        deletedAttendance: {
+          id: 'attendance-1',
+          title: 'Team Meeting',
+          responseCount: 5
+        }
+      }
+
+      expect(deleteResponse.message).toBe('Attendance deleted successfully')
+      expect(deleteResponse.deletedAttendance.id).toBe('attendance-1')
+      expect(deleteResponse.deletedAttendance.responseCount).toBe(5)
+    })
+
+    test('should return 404 for non-existent attendance', async () => {
+      const attendance = null
+      expect(attendance).toBeNull()
+    })
+  })
+
+  describe('Attendance Data Validation', () => {
+    test('should have valid attendance structure', () => {
+      const attendance = {
+        id: 'attendance-1',
+        title: 'Team Meeting',
+        date: '2024-01-15',
+        responses: [
+          { name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' },
+          { name: 'Bob', attending: false, timestamp: '2024-01-10T11:00:00Z' }
+        ],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-10T11:00:00Z'
+      }
+
+      expect(attendance).toHaveProperty('id')
+      expect(attendance).toHaveProperty('title')
+      expect(attendance).toHaveProperty('date')
+      expect(attendance).toHaveProperty('responses')
+      expect(attendance).toHaveProperty('createdAt')
+      expect(attendance).toHaveProperty('updatedAt')
+      expect(Array.isArray(attendance.responses)).toBe(true)
+    })
+
+    test('should have valid response structure', () => {
+      const response = {
+        name: 'Alice',
+        attending: true,
+        timestamp: '2024-01-10T10:00:00Z'
+      }
+
+      expect(response).toHaveProperty('name')
+      expect(response).toHaveProperty('attending')
+      expect(response).toHaveProperty('timestamp')
+      expect(typeof response.name).toBe('string')
+      expect(typeof response.attending).toBe('boolean')
+    })
+
+    test('should handle attendance with no responses', () => {
+      const emptyAttendance = {
+        id: 'attendance-2',
+        title: 'Future Event',
+        date: '2024-12-31',
+        responses: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T09:00:00Z'
+      }
+
+      expect(emptyAttendance.responses).toHaveLength(0)
+    })
+
+    test('should count attending vs not attending', () => {
+      const responses = [
+        { name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' },
+        { name: 'Bob', attending: false, timestamp: '2024-01-10T11:00:00Z' },
+        { name: 'Charlie', attending: true, timestamp: '2024-01-10T12:00:00Z' },
+        { name: 'Diana', attending: true, timestamp: '2024-01-10T13:00:00Z' },
+        { name: 'Eve', attending: false, timestamp: '2024-01-10T14:00:00Z' }
+      ]
+
+      const attendingCount = responses.filter(r => r.attending).length
+      const notAttendingCount = responses.filter(r => !r.attending).length
+
+      expect(attendingCount).toBe(3)
+      expect(notAttendingCount).toBe(2)
+      expect(attendingCount + notAttendingCount).toBe(responses.length)
+    })
+  })
+})

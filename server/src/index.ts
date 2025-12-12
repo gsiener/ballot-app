@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { ApiResponse, Dashboard } from 'shared/dist'
+import type { ApiResponse, Dashboard, Attendance, AttendanceResponse } from 'shared/dist'
 import { initTelemetry, createSpan, addSpanAttributes, recordSpanEvent, setSpanStatus } from './telemetry'
 
 type Bindings = {
@@ -112,6 +112,30 @@ async function saveDashboards(kv: KVNamespace, dashboards: Dashboard[]): Promise
     await kv.put('dashboards', JSON.stringify(dashboards))
   } catch (error) {
     console.error('Error saving dashboards to KV:', error)
+    throw error
+  }
+}
+
+// Helper functions for Attendance KV storage
+async function getAllAttendances(kv: KVNamespace): Promise<Attendance[]> {
+  try {
+    const attendancesJson = await kv.get('attendances')
+    if (attendancesJson) {
+      return JSON.parse(attendancesJson)
+    }
+    // Return empty array if no attendances exist
+    return []
+  } catch (error) {
+    console.error('Error getting attendances from KV:', error)
+    return []
+  }
+}
+
+async function saveAttendances(kv: KVNamespace, attendances: Attendance[]): Promise<void> {
+  try {
+    await kv.put('attendances', JSON.stringify(attendances))
+  } catch (error) {
+    console.error('Error saving attendances to KV:', error)
     throw error
   }
 }
@@ -823,6 +847,305 @@ app.delete('/api/dashboards/:id', async (c) => {
         id: deletedDashboard.id,
         name: deletedDashboard.name,
         ballotCount: deletedDashboard.ballotIds.length
+      }
+    })
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+// Attendance endpoints
+app.get('/api/attendance', async (c) => {
+  const span = createSpan('get_all_attendances')
+
+  try {
+    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+
+    // Sort by date descending (most recent first)
+    const sortedAttendances = attendances.sort((a, b) =>
+      new Date(b.date).getTime() - new Date(a.date).getTime()
+    )
+
+    addSpanAttributes({
+      'attendance.count': sortedAttendances.length,
+      'operation': 'get_all_attendances'
+    })
+
+    recordSpanEvent('attendances_retrieved', {
+      'attendance.count': sortedAttendances.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(sortedAttendances)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.get('/api/attendance/:id', async (c) => {
+  const span = createSpan('get_single_attendance')
+  const id = c.req.param('id')
+
+  try {
+    addSpanAttributes({
+      'attendance.id': id,
+      'operation': 'get_single_attendance'
+    })
+
+    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+    const attendance = attendances.find(a => a.id === id)
+
+    if (!attendance) {
+      addSpanAttributes({
+        'attendance.found': false
+      })
+      recordSpanEvent('attendance_not_found', { 'attendance.id': id })
+      setSpanStatus(span, false, 'Attendance not found')
+      return c.json({ error: 'Attendance not found' }, 404)
+    }
+
+    addSpanAttributes({
+      'attendance.found': true,
+      'attendance.response_count': attendance.responses.length
+    })
+
+    recordSpanEvent('attendance_retrieved', {
+      'attendance.id': id,
+      'attendance.response_count': attendance.responses.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(attendance)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.post('/api/attendance', async (c) => {
+  const span = createSpan('create_attendance')
+
+  try {
+    const { title, date } = await c.req.json()
+
+    addSpanAttributes({
+      'operation': 'create_attendance',
+      'title.provided': !!title,
+      'date.provided': !!date
+    })
+
+    if (!title || typeof title !== 'string' || title.trim() === '') {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Title is required'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'missing_title' })
+      setSpanStatus(span, false, 'Title is required')
+      return c.json({ error: 'Title is required' }, 400)
+    }
+
+    if (!date || typeof date !== 'string') {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Date is required'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'missing_date' })
+      setSpanStatus(span, false, 'Date is required')
+      return c.json({ error: 'Date is required' }, 400)
+    }
+
+    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+
+    const newAttendance: Attendance = {
+      id: `attendance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      title: title.trim(),
+      date: date,
+      responses: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    }
+
+    attendances.push(newAttendance)
+    await saveAttendances(c.env.BALLOTS_KV, attendances)
+
+    addSpanAttributes({
+      'attendance.id': newAttendance.id,
+      'attendance.title_length': title.trim().length,
+      'attendances.total_count': attendances.length
+    })
+
+    recordSpanEvent('attendance_created', {
+      'attendance.id': newAttendance.id,
+      'attendances.total_count': attendances.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(newAttendance, 201)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.put('/api/attendance/:id', async (c) => {
+  const span = createSpan('update_attendance')
+  const id = c.req.param('id')
+
+  try {
+    const { name, attending } = await c.req.json()
+
+    addSpanAttributes({
+      'attendance.id': id,
+      'operation': 'update_attendance'
+    })
+
+    if (!name || typeof name !== 'string' || name.trim() === '') {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Name is required'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'missing_name' })
+      setSpanStatus(span, false, 'Name is required')
+      return c.json({ error: 'Name is required' }, 400)
+    }
+
+    if (typeof attending !== 'boolean') {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Attending must be true or false'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'invalid_attending' })
+      setSpanStatus(span, false, 'Attending must be true or false')
+      return c.json({ error: 'Attending must be true or false' }, 400)
+    }
+
+    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+    const attendanceIndex = attendances.findIndex(a => a.id === id)
+
+    if (attendanceIndex === -1) {
+      addSpanAttributes({
+        'attendance.found': false
+      })
+      recordSpanEvent('attendance_not_found', { 'attendance.id': id })
+      setSpanStatus(span, false, 'Attendance not found')
+      return c.json({ error: 'Attendance not found' }, 404)
+    }
+
+    const currentAttendance = attendances[attendanceIndex]!
+    const trimmedName = name.trim()
+
+    // Check if this person already responded (case-insensitive)
+    const existingResponseIndex = currentAttendance.responses.findIndex(
+      r => r.name.toLowerCase() === trimmedName.toLowerCase()
+    )
+
+    const newResponse: AttendanceResponse = {
+      name: trimmedName,
+      attending: attending,
+      timestamp: new Date().toISOString()
+    }
+
+    if (existingResponseIndex !== -1) {
+      // Update existing response
+      currentAttendance.responses[existingResponseIndex] = newResponse
+      addSpanAttributes({
+        'response.updated': true
+      })
+    } else {
+      // Add new response
+      currentAttendance.responses.push(newResponse)
+      addSpanAttributes({
+        'response.updated': false
+      })
+    }
+
+    currentAttendance.updatedAt = new Date().toISOString()
+    attendances[attendanceIndex] = currentAttendance
+    await saveAttendances(c.env.BALLOTS_KV, attendances)
+
+    addSpanAttributes({
+      'attendance.found': true,
+      'attendance.response_count': currentAttendance.responses.length,
+      'response.name': trimmedName,
+      'response.attending': attending
+    })
+
+    recordSpanEvent('attendance_response_added', {
+      'attendance.id': id,
+      'response.attending': attending,
+      'attendance.response_count': currentAttendance.responses.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(currentAttendance)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
+app.delete('/api/attendance/:id', adminAuth, async (c) => {
+  const span = createSpan('admin_delete_attendance')
+  const id = c.req.param('id')
+
+  try {
+    addSpanAttributes({
+      'attendance.id': id,
+      'operation': 'admin_delete_attendance',
+      'admin.action': 'delete_attendance'
+    })
+
+    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+    const attendanceIndex = attendances.findIndex(a => a.id === id)
+
+    if (attendanceIndex === -1) {
+      addSpanAttributes({
+        'attendance.found': false
+      })
+      recordSpanEvent('admin_delete_failed', {
+        'attendance.id': id,
+        'error': 'attendance_not_found'
+      })
+      setSpanStatus(span, false, 'Attendance not found')
+      return c.json({ error: 'Attendance not found' }, 404)
+    }
+
+    const deletedAttendance = attendances[attendanceIndex]!
+    attendances.splice(attendanceIndex, 1)
+    await saveAttendances(c.env.BALLOTS_KV, attendances)
+
+    addSpanAttributes({
+      'attendance.found': true,
+      'attendance.title': deletedAttendance.title,
+      'attendance.response_count': deletedAttendance.responses.length
+    })
+
+    recordSpanEvent('admin_attendance_deleted', {
+      'attendance.id': id,
+      'attendance.title': deletedAttendance.title,
+      'attendance.responses': deletedAttendance.responses.length,
+      'admin.user': 'authenticated'
+    })
+
+    setSpanStatus(span, true)
+    return c.json({
+      message: 'Attendance deleted successfully',
+      deletedAttendance: {
+        id: deletedAttendance.id,
+        title: deletedAttendance.title,
+        responseCount: deletedAttendance.responses.length
       }
     })
   } catch (error) {
