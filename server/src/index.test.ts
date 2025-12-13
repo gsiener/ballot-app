@@ -35,6 +35,7 @@ const mockKV = {
           id: 'dashboard-1',
           name: 'Test Dashboard',
           ballotIds: ['test-1'],
+          attendanceIds: ['attendance-1'],
           createdAt: '2024-01-01T09:00:00Z',
           updatedAt: '2024-01-01T10:00:00Z'
         }
@@ -376,6 +377,7 @@ describe('Dashboard API', () => {
           id: 'dashboard-1',
           name: 'Test Dashboard',
           ballotIds: ['test-1'],
+          attendanceIds: ['attendance-1'],
           createdAt: '2024-01-01T09:00:00Z',
           updatedAt: '2024-01-01T10:00:00Z'
         }
@@ -385,6 +387,7 @@ describe('Dashboard API', () => {
       expect(mockResponse[0]).toHaveProperty('id', 'dashboard-1')
       expect(mockResponse[0]).toHaveProperty('name', 'Test Dashboard')
       expect(mockResponse[0]?.ballotIds).toHaveLength(1)
+      expect(mockResponse[0]?.attendanceIds).toHaveLength(1)
     })
 
     test('should return empty array when no dashboards exist', async () => {
@@ -399,6 +402,7 @@ describe('Dashboard API', () => {
         id: 'dashboard-1',
         name: 'Test Dashboard',
         ballotIds: ['test-1'],
+        attendanceIds: ['attendance-1'],
         createdAt: '2024-01-01T09:00:00Z',
         updatedAt: '2024-01-01T10:00:00Z'
       }
@@ -406,6 +410,7 @@ describe('Dashboard API', () => {
       expect(dashboard).toHaveProperty('id', 'dashboard-1')
       expect(dashboard).toHaveProperty('name', 'Test Dashboard')
       expect(dashboard.ballotIds).toContain('test-1')
+      expect(dashboard.attendanceIds).toContain('attendance-1')
     })
 
     test('should return 404 for non-existent dashboard', async () => {
@@ -425,12 +430,14 @@ describe('Dashboard API', () => {
         id: expect.stringMatching(/^dashboard-\d+-[a-z0-9]+$/),
         name: newDashboard.name,
         ballotIds: [],
+        attendanceIds: [],
         createdAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
         updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
       }
 
       expect(createdDashboard.name).toBe('New Dashboard')
       expect(createdDashboard.ballotIds).toHaveLength(0)
+      expect(createdDashboard.attendanceIds).toHaveLength(0)
     })
 
     test('should reject empty dashboard name', async () => {
@@ -490,12 +497,42 @@ describe('Dashboard API', () => {
         id: 'dashboard-1',
         name: 'Completely Updated',
         ballotIds: ['new-ballot-1'],
+        attendanceIds: ['attendance-1'],
         createdAt: '2024-01-01T09:00:00Z',
         updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
       }
 
       expect(updatedDashboard.name).toBe('Completely Updated')
       expect(updatedDashboard.ballotIds).toEqual(['new-ballot-1'])
+    })
+
+    test('should update dashboard attendanceIds', async () => {
+      const updatedDashboard = {
+        id: 'dashboard-1',
+        name: 'Test Dashboard',
+        ballotIds: ['test-1'],
+        attendanceIds: ['attendance-1', 'attendance-2', 'attendance-3'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(updatedDashboard.attendanceIds).toHaveLength(3)
+      expect(updatedDashboard.attendanceIds).toContain('attendance-2')
+      expect(updatedDashboard.attendanceIds).toContain('attendance-3')
+    })
+
+    test('should update both ballotIds and attendanceIds', async () => {
+      const updatedDashboard = {
+        id: 'dashboard-1',
+        name: 'Test Dashboard',
+        ballotIds: ['ballot-1', 'ballot-2'],
+        attendanceIds: ['attendance-1', 'attendance-2'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/)
+      }
+
+      expect(updatedDashboard.ballotIds).toHaveLength(2)
+      expect(updatedDashboard.attendanceIds).toHaveLength(2)
     })
 
     test('should return 404 for non-existent dashboard', async () => {
@@ -532,6 +569,7 @@ describe('Dashboard API', () => {
         id: 'dashboard-1',
         name: 'Test Dashboard',
         ballotIds: ['test-1', 'test-2'],
+        attendanceIds: ['attendance-1'],
         createdAt: '2024-01-01T09:00:00Z',
         updatedAt: '2024-01-01T10:00:00Z'
       }
@@ -539,33 +577,53 @@ describe('Dashboard API', () => {
       expect(dashboard).toHaveProperty('id')
       expect(dashboard).toHaveProperty('name')
       expect(dashboard).toHaveProperty('ballotIds')
+      expect(dashboard).toHaveProperty('attendanceIds')
       expect(dashboard).toHaveProperty('createdAt')
       expect(dashboard).toHaveProperty('updatedAt')
       expect(Array.isArray(dashboard.ballotIds)).toBe(true)
+      expect(Array.isArray(dashboard.attendanceIds)).toBe(true)
     })
 
-    test('should handle dashboards with no ballots', () => {
+    test('should handle dashboards with no ballots or attendances', () => {
       const emptyDashboard = {
         id: 'dashboard-2',
         name: 'Empty Dashboard',
         ballotIds: [],
+        attendanceIds: [],
         createdAt: '2024-01-01T09:00:00Z',
         updatedAt: '2024-01-01T09:00:00Z'
       }
 
       expect(emptyDashboard.ballotIds).toHaveLength(0)
+      expect(emptyDashboard.attendanceIds).toHaveLength(0)
     })
 
-    test('should handle dashboards with multiple ballots', () => {
+    test('should handle dashboards with multiple ballots and attendances', () => {
       const fullDashboard = {
         id: 'dashboard-3',
         name: 'Full Dashboard',
         ballotIds: ['ballot-1', 'ballot-2', 'ballot-3', 'ballot-4', 'ballot-5'],
+        attendanceIds: ['attendance-1', 'attendance-2', 'attendance-3'],
         createdAt: '2024-01-01T09:00:00Z',
         updatedAt: '2024-01-01T11:00:00Z'
       }
 
       expect(fullDashboard.ballotIds).toHaveLength(5)
+      expect(fullDashboard.attendanceIds).toHaveLength(3)
+    })
+
+    test('should handle dashboards with attendances but no ballots', () => {
+      const attendanceOnlyDashboard = {
+        id: 'dashboard-4',
+        name: 'Attendance Only Dashboard',
+        ballotIds: [],
+        attendanceIds: ['attendance-1', 'attendance-2'],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T11:00:00Z'
+      }
+
+      expect(attendanceOnlyDashboard.ballotIds).toHaveLength(0)
+      expect(attendanceOnlyDashboard.attendanceIds).toHaveLength(2)
     })
   })
 })

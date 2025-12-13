@@ -132,6 +132,39 @@ export function useDashboards() {
     }
   }
 
+  const addAttendance = async (dashboardId: string, attendanceId: string) => {
+    try {
+      const dashboard = dashboards.find(d => d.id === dashboardId)
+      if (!dashboard) {
+        throw new Error('Dashboard not found')
+      }
+
+      // Use Set to avoid duplicates
+      const updatedAttendanceIds = [...new Set([...(dashboard.attendanceIds || []), attendanceId])]
+
+      await updateDashboard(dashboardId, { attendanceIds: updatedAttendanceIds })
+    } catch (err) {
+      console.error('Error adding attendance to dashboard:', err)
+      throw err
+    }
+  }
+
+  const removeAttendance = async (dashboardId: string, attendanceId: string) => {
+    try {
+      const dashboard = dashboards.find(d => d.id === dashboardId)
+      if (!dashboard) {
+        throw new Error('Dashboard not found')
+      }
+
+      const updatedAttendanceIds = (dashboard.attendanceIds || []).filter(id => id !== attendanceId)
+
+      await updateDashboard(dashboardId, { attendanceIds: updatedAttendanceIds })
+    } catch (err) {
+      console.error('Error removing attendance from dashboard:', err)
+      throw err
+    }
+  }
+
   return {
     dashboards,
     loading,
@@ -142,6 +175,8 @@ export function useDashboards() {
     getDashboard,
     addBallot,
     removeBallot,
+    addAttendance,
+    removeAttendance,
     refetch: fetchDashboards
   }
 }

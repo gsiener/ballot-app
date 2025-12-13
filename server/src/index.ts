@@ -715,6 +715,7 @@ app.post('/api/dashboards', async (c) => {
       id: `dashboard-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: name.trim(),
       ballotIds: [],
+      attendanceIds: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()
     }
@@ -748,7 +749,7 @@ app.put('/api/dashboards/:id', async (c) => {
   const id = c.req.param('id')
 
   try {
-    const { name, ballotIds } = await c.req.json()
+    const { name, ballotIds, attendanceIds } = await c.req.json()
 
     addSpanAttributes({
       'dashboard.id': id,
@@ -773,6 +774,7 @@ app.put('/api/dashboards/:id', async (c) => {
       ...currentDashboard,
       name: name !== undefined && typeof name === 'string' ? name.trim() : currentDashboard.name,
       ballotIds: Array.isArray(ballotIds) ? ballotIds : currentDashboard.ballotIds,
+      attendanceIds: Array.isArray(attendanceIds) ? attendanceIds : (currentDashboard.attendanceIds || []),
       updatedAt: new Date().toISOString()
     }
 
@@ -781,12 +783,14 @@ app.put('/api/dashboards/:id', async (c) => {
 
     addSpanAttributes({
       'dashboard.found': true,
-      'dashboard.ballot_count': updatedDashboard.ballotIds.length
+      'dashboard.ballot_count': updatedDashboard.ballotIds.length,
+      'dashboard.attendance_count': updatedDashboard.attendanceIds.length
     })
 
     recordSpanEvent('dashboard_updated', {
       'dashboard.id': id,
-      'dashboard.ballot_count': updatedDashboard.ballotIds.length
+      'dashboard.ballot_count': updatedDashboard.ballotIds.length,
+      'dashboard.attendance_count': updatedDashboard.attendanceIds.length
     })
 
     setSpanStatus(span, true)
