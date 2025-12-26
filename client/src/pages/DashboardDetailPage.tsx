@@ -55,24 +55,28 @@ export function DashboardDetailPage() {
   }, [dashboard?.ballotIds, dashboard?.attendanceIds])
 
   const fetchBallots = async () => {
-    if (!dashboard) return
+    if (!dashboard || dashboard.ballotIds.length === 0) {
+      setBallots([])
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     try {
-      const ballotPromises = dashboard.ballotIds.map(async (ballotId) => {
-        try {
-          const response = await fetch(`${API_BASE}/ballots/${ballotId}`)
-          if (!response.ok) return null
-          return await response.json()
-        } catch {
-          return null
-        }
-      })
-
-      const results = await Promise.all(ballotPromises)
-      setBallots(results.filter((b): b is Ballot => b !== null))
+      // Use batch endpoint to fetch all ballots in a single request
+      const response = await fetch(
+        `${API_BASE}/ballots/batch?ids=${dashboard.ballotIds.join(',')}`
+      )
+      if (!response.ok) {
+        console.error('Failed to fetch ballots batch')
+        setBallots([])
+        return
+      }
+      const results = await response.json()
+      setBallots(results)
     } catch (error) {
       console.error('Error fetching ballots:', error)
+      setBallots([])
     } finally {
       setLoading(false)
     }
@@ -81,22 +85,27 @@ export function DashboardDetailPage() {
   const fetchAttendances = async () => {
     if (!dashboard) return
 
-    try {
-      const attendanceIds = dashboard.attendanceIds || []
-      const attendancePromises = attendanceIds.map(async (attendanceId) => {
-        try {
-          const response = await fetch(`${API_BASE}/attendance/${attendanceId}`)
-          if (!response.ok) return null
-          return await response.json()
-        } catch {
-          return null
-        }
-      })
+    const attendanceIds = dashboard.attendanceIds || []
+    if (attendanceIds.length === 0) {
+      setAttendances([])
+      return
+    }
 
-      const results = await Promise.all(attendancePromises)
-      setAttendances(results.filter((a): a is Attendance => a !== null))
+    try {
+      // Use batch endpoint to fetch all attendances in a single request
+      const response = await fetch(
+        `${API_BASE}/attendance/batch?ids=${attendanceIds.join(',')}`
+      )
+      if (!response.ok) {
+        console.error('Failed to fetch attendances batch')
+        setAttendances([])
+        return
+      }
+      const results = await response.json()
+      setAttendances(results)
     } catch (error) {
       console.error('Error fetching attendances:', error)
+      setAttendances([])
     }
   }
 

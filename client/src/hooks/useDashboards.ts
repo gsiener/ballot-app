@@ -45,7 +45,8 @@ export function useDashboards() {
       }
 
       const newDashboard = await response.json()
-      setDashboards([...dashboards, newDashboard])
+      // Use functional update to avoid stale closure
+      setDashboards(prev => [...prev, newDashboard])
       return newDashboard
     } catch (err) {
       console.error('Error creating dashboard:', err)
@@ -55,11 +56,6 @@ export function useDashboards() {
 
   const updateDashboard = async (id: string, updates: Partial<Dashboard>) => {
     try {
-      const dashboard = dashboards.find(d => d.id === id)
-      if (!dashboard) {
-        throw new Error('Dashboard not found')
-      }
-
       const response = await fetch(`${API_URL}/api/dashboards/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -71,7 +67,8 @@ export function useDashboards() {
       }
 
       const updatedDashboard = await response.json()
-      setDashboards(dashboards.map(d => d.id === id ? updatedDashboard : d))
+      // Use functional update to avoid stale closure
+      setDashboards(prev => prev.map(d => d.id === id ? updatedDashboard : d))
     } catch (err) {
       console.error('Error updating dashboard:', err)
       throw err
@@ -88,7 +85,8 @@ export function useDashboards() {
         throw new Error('Failed to delete dashboard')
       }
 
-      setDashboards(dashboards.filter(d => d.id !== id))
+      // Use functional update to avoid stale closure
+      setDashboards(prev => prev.filter(d => d.id !== id))
     } catch (err) {
       console.error('Error deleting dashboard:', err)
       throw err

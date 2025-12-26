@@ -40,6 +40,7 @@ export function AdminPanel() {
   const [deletingDashboard, setDeletingDashboard] = useState<string | null>(null)
   const [deletingAttendance, setDeletingAttendance] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const adminKey = searchParams.get('key')
 
@@ -57,6 +58,13 @@ export function AdminPanel() {
   useEffect(() => {
     document.title = 'Ballot Admin'
   }, [])
+
+  // Auto-dismiss toast with proper cleanup
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   const fetchAdminBallots = async () => {
     if (!adminKey) return
@@ -114,14 +122,7 @@ export function AdminPanel() {
 
       // Remove from local state
       setBallots(prev => prev.filter(ballot => ballot.id !== ballotId))
-
-      // Show success message briefly
-      const deletedMessage = document.createElement('div')
-      deletedMessage.textContent = 'Ballot deleted successfully'
-      deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
-      document.body.appendChild(deletedMessage)
-      setTimeout(() => document.body.removeChild(deletedMessage), 3000)
-
+      setToast('Ballot deleted successfully')
     } catch (error) {
       console.error('Error deleting ballot:', error)
       alert('Failed to delete ballot. Please try again.')
@@ -204,14 +205,7 @@ export function AdminPanel() {
 
       // Remove from local state
       setDashboards(prev => prev.filter(dashboard => dashboard.id !== dashboardId))
-
-      // Show success message briefly
-      const deletedMessage = document.createElement('div')
-      deletedMessage.textContent = 'Dashboard deleted successfully'
-      deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
-      document.body.appendChild(deletedMessage)
-      setTimeout(() => document.body.removeChild(deletedMessage), 3000)
-
+      setToast('Dashboard deleted successfully')
     } catch (error) {
       console.error('Error deleting dashboard:', error)
       alert('Failed to delete dashboard. Please try again.')
@@ -243,14 +237,7 @@ export function AdminPanel() {
 
       // Remove from local state
       setAttendances(prev => prev.filter(attendance => attendance.id !== attendanceId))
-
-      // Show success message briefly
-      const deletedMessage = document.createElement('div')
-      deletedMessage.textContent = 'Attendance deleted successfully'
-      deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
-      document.body.appendChild(deletedMessage)
-      setTimeout(() => document.body.removeChild(deletedMessage), 3000)
-
+      setToast('Attendance deleted successfully')
     } catch (error) {
       console.error('Error deleting attendance:', error)
       alert('Failed to delete attendance. Please try again.')
@@ -324,6 +311,12 @@ export function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50">
+          {toast}
+        </div>
+      )}
       <div className="container mx-auto p-4 max-w-6xl">
         {/* Header */}
         <div className="bg-card text-card-foreground rounded-lg shadow-sm p-6 mb-6 border border-border">

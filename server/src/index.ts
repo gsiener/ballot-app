@@ -31,6 +31,13 @@ type Ballot = {
 
 const app = new Hono<HonoEnv>()
 
+// Input validation constants
+const MAX_QUESTION_LENGTH = 500
+const MAX_DASHBOARD_NAME_LENGTH = 100
+const MAX_ATTENDANCE_TITLE_LENGTH = 200
+const MAX_COMMENT_LENGTH = 1000
+const MAX_NAME_LENGTH = 100
+
 app.use(cors())
 
 // Middleware to initialize telemetry for each request
@@ -89,6 +96,7 @@ async function saveBallots(kv: KVNamespace, ballots: Ballot[]): Promise<void> {
     await kv.put('ballots', JSON.stringify(ballots))
   } catch (error) {
     console.error('Error saving ballots to KV:', error)
+    throw error
   }
 }
 
@@ -245,6 +253,74 @@ app.get('/api/ballots', async (c) => {
   }
 })
 
+// Get multiple ballots by IDs (batch endpoint to avoid N+1 queries)
+app.get('/api/ballots/batch', async (c) => {
+  const span = createSpan('get_ballots_batch')
+
+  try {
+    const idsParam = c.req.query('ids')
+
+    if (!idsParam) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'No IDs provided'
+      })
+      setSpanStatus(span, false, 'IDs query parameter is required')
+      return c.json({ error: 'IDs query parameter is required (e.g., ?ids=id1,id2,id3)' }, 400)
+    }
+
+    const ids = idsParam.split(',').map(id => id.trim()).filter(id => id)
+
+    if (ids.length === 0) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'No valid IDs provided'
+      })
+      setSpanStatus(span, false, 'No valid IDs provided')
+      return c.json({ error: 'No valid IDs provided' }, 400)
+    }
+
+    // Limit batch size to prevent abuse
+    const MAX_BATCH_SIZE = 100
+    if (ids.length > MAX_BATCH_SIZE) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Too many IDs requested'
+      })
+      setSpanStatus(span, false, `Maximum ${MAX_BATCH_SIZE} IDs allowed per request`)
+      return c.json({ error: `Maximum ${MAX_BATCH_SIZE} IDs allowed per request` }, 400)
+    }
+
+    addSpanAttributes({
+      'operation': 'get_ballots_batch',
+      'ballot.requested_count': ids.length
+    })
+
+    const allBallots = await getAllBallots(c.env.BALLOTS_KV)
+    const requestedBallots = ids
+      .map(id => allBallots.find(b => b.id === id))
+      .filter((b): b is Ballot => b !== undefined)
+
+    addSpanAttributes({
+      'ballot.found_count': requestedBallots.length,
+      'ballot.missing_count': ids.length - requestedBallots.length
+    })
+
+    recordSpanEvent('ballots_batch_retrieved', {
+      'ballot.requested_count': ids.length,
+      'ballot.found_count': requestedBallots.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(requestedBallots)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
 // Get single ballot
 app.get('/api/ballots/:id', async (c) => {
   const span = createSpan('get_single_ballot')
@@ -311,6 +387,16 @@ app.post('/api/ballots', async (c) => {
       return c.json({ error: 'Question is required' }, 400)
     }
 
+    if (question.trim().length > MAX_QUESTION_LENGTH) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Question too long'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'question_too_long' })
+      setSpanStatus(span, false, `Question must be ${MAX_QUESTION_LENGTH} characters or less`)
+      return c.json({ error: `Question must be ${MAX_QUESTION_LENGTH} characters or less` }, 400)
+    }
+
     const ballots = await getAllBallots(c.env.BALLOTS_KV)
 
     const newBallot: Ballot = {
@@ -352,12 +438,27 @@ app.put('/api/ballots/:id', async (c) => {
   
   try {
     const updatedBallot = await c.req.json()
-    
+
     addSpanAttributes({
       'ballot.id': id,
       'operation': 'update_ballot'
     })
-    
+
+    // Validate comment lengths in votes
+    if (updatedBallot.votes && Array.isArray(updatedBallot.votes)) {
+      for (const vote of updatedBallot.votes) {
+        if (vote.comment && vote.comment.length > MAX_COMMENT_LENGTH) {
+          addSpanAttributes({
+            'validation.failed': true,
+            'error': 'Comment too long'
+          })
+          recordSpanEvent('validation_failed', { 'reason': 'comment_too_long' })
+          setSpanStatus(span, false, `Comment must be ${MAX_COMMENT_LENGTH} characters or less`)
+          return c.json({ error: `Comment must be ${MAX_COMMENT_LENGTH} characters or less` }, 400)
+        }
+      }
+    }
+
     const ballots = await getAllBallots(c.env.BALLOTS_KV)
     const ballotIndex = ballots.findIndex(b => b.id === id)
     
@@ -709,6 +810,16 @@ app.post('/api/dashboards', async (c) => {
       return c.json({ error: 'Dashboard name is required' }, 400)
     }
 
+    if (name.trim().length > MAX_DASHBOARD_NAME_LENGTH) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Dashboard name too long'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'name_too_long' })
+      setSpanStatus(span, false, `Dashboard name must be ${MAX_DASHBOARD_NAME_LENGTH} characters or less`)
+      return c.json({ error: `Dashboard name must be ${MAX_DASHBOARD_NAME_LENGTH} characters or less` }, 400)
+    }
+
     const dashboards = await getAllDashboards(c.env.BALLOTS_KV)
 
     const newDashboard: Dashboard = {
@@ -862,6 +973,75 @@ app.delete('/api/dashboards/:id', async (c) => {
 })
 
 // Attendance endpoints
+
+// Get multiple attendances by IDs (batch endpoint to avoid N+1 queries)
+app.get('/api/attendance/batch', async (c) => {
+  const span = createSpan('get_attendances_batch')
+
+  try {
+    const idsParam = c.req.query('ids')
+
+    if (!idsParam) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'No IDs provided'
+      })
+      setSpanStatus(span, false, 'IDs query parameter is required')
+      return c.json({ error: 'IDs query parameter is required (e.g., ?ids=id1,id2,id3)' }, 400)
+    }
+
+    const ids = idsParam.split(',').map(id => id.trim()).filter(id => id)
+
+    if (ids.length === 0) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'No valid IDs provided'
+      })
+      setSpanStatus(span, false, 'No valid IDs provided')
+      return c.json({ error: 'No valid IDs provided' }, 400)
+    }
+
+    // Limit batch size to prevent abuse
+    const MAX_BATCH_SIZE = 100
+    if (ids.length > MAX_BATCH_SIZE) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Too many IDs requested'
+      })
+      setSpanStatus(span, false, `Maximum ${MAX_BATCH_SIZE} IDs allowed per request`)
+      return c.json({ error: `Maximum ${MAX_BATCH_SIZE} IDs allowed per request` }, 400)
+    }
+
+    addSpanAttributes({
+      'operation': 'get_attendances_batch',
+      'attendance.requested_count': ids.length
+    })
+
+    const allAttendances = await getAllAttendances(c.env.BALLOTS_KV)
+    const requestedAttendances = ids
+      .map(id => allAttendances.find(a => a.id === id))
+      .filter((a): a is Attendance => a !== undefined)
+
+    addSpanAttributes({
+      'attendance.found_count': requestedAttendances.length,
+      'attendance.missing_count': ids.length - requestedAttendances.length
+    })
+
+    recordSpanEvent('attendances_batch_retrieved', {
+      'attendance.requested_count': ids.length,
+      'attendance.found_count': requestedAttendances.length
+    })
+
+    setSpanStatus(span, true)
+    return c.json(requestedAttendances)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
 app.get('/api/attendance', async (c) => {
   const span = createSpan('get_all_attendances')
 
@@ -956,6 +1136,16 @@ app.post('/api/attendance', async (c) => {
       return c.json({ error: 'Title is required' }, 400)
     }
 
+    if (title.trim().length > MAX_ATTENDANCE_TITLE_LENGTH) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Title too long'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'title_too_long' })
+      setSpanStatus(span, false, `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less`)
+      return c.json({ error: `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less` }, 400)
+    }
+
     if (!date || typeof date !== 'string') {
       addSpanAttributes({
         'validation.failed': true,
@@ -1021,6 +1211,16 @@ app.put('/api/attendance/:id', async (c) => {
       recordSpanEvent('validation_failed', { 'reason': 'missing_name' })
       setSpanStatus(span, false, 'Name is required')
       return c.json({ error: 'Name is required' }, 400)
+    }
+
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Name too long'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'name_too_long' })
+      setSpanStatus(span, false, `Name must be ${MAX_NAME_LENGTH} characters or less`)
+      return c.json({ error: `Name must be ${MAX_NAME_LENGTH} characters or less` }, 400)
     }
 
     if (typeof attending !== 'boolean') {
