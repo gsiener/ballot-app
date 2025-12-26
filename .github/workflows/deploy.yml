@@ -70,6 +70,10 @@ jobs:
           wranglerVersion: '4.26.0'
           command: deploy
           workingDirectory: ./
+          secrets: |
+            HONEYCOMB_API_KEY
+        env:
+          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
 
       - name: Deploy to Cloudflare Pages (Client)
         uses: cloudflare/wrangler-action@v3
