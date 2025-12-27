@@ -2,6 +2,10 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Communication Style
+
+Keep responses concise - under 500 characters when possible. Be direct and avoid verbose explanations.
+
 ## Project Overview
 
 Ballot App is a real-time voting platform built as a monorepo with Bun, deployed on Cloudflare's edge infrastructure. The application uses a color-coded voting system (green/yellow/red) with optional comments, featuring comprehensive OpenTelemetry observability.
