@@ -14,14 +14,9 @@ function App() {
       <div className="min-h-screen bg-background">
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="container mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4">
-            <nav className="flex items-center space-x-6 text-sm font-medium">
-              <a href="/" className="text-foreground hover:text-primary transition-colors">
-                Ballots
-              </a>
-              <a href="/dashboards" className="text-foreground hover:text-primary transition-colors">
-                Dashboards
-              </a>
-            </nav>
+            <a href="/" className="text-foreground hover:text-primary transition-colors text-sm font-medium">
+              Ballots
+            </a>
             <ThemeToggle />
           </div>
         </header>
