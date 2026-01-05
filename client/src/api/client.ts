@@ -1,4 +1,4 @@
-import type { Ballot, Vote, VoteColor, AdminBallot, Dashboard } from 'shared/dist'
+import type { Ballot, Vote, VoteColor, AdminBallot, Dashboard, Attendance } from 'shared/dist'
 
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://ballot-app-server.siener.workers.dev'
 
@@ -62,6 +62,12 @@ export const ballotApi = {
       })
     })
     return handleResponse<Ballot>(response)
+  },
+
+  getBatch: async (ids: string[]): Promise<Ballot[]> => {
+    if (ids.length === 0) return []
+    const response = await fetch(`${API_BASE_URL}/api/ballots/batch?ids=${ids.join(',')}`)
+    return handleResponse<Ballot[]>(response)
   }
 }
 
@@ -86,7 +92,7 @@ export const dashboardApi = {
     return handleResponse<Dashboard>(response)
   },
 
-  update: async (id: string, updates: Partial<Pick<Dashboard, 'name' | 'ballotIds'>>): Promise<Dashboard> => {
+  update: async (id: string, updates: Partial<Pick<Dashboard, 'name' | 'ballotIds' | 'attendanceIds'>>): Promise<Dashboard> => {
     const response = await fetch(`${API_BASE_URL}/api/dashboards/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -139,5 +145,53 @@ export const adminApi = {
   }
 }
 
+// Attendance API
+export const attendanceApi = {
+  getAll: async (): Promise<Attendance[]> => {
+    const response = await fetch(`${API_BASE_URL}/api/attendance`)
+    return handleResponse<Attendance[]>(response)
+  },
+
+  getById: async (id: string): Promise<Attendance> => {
+    const response = await fetch(`${API_BASE_URL}/api/attendance/${id}`)
+    return handleResponse<Attendance>(response)
+  },
+
+  getBatch: async (ids: string[]): Promise<Attendance[]> => {
+    if (ids.length === 0) return []
+    const response = await fetch(`${API_BASE_URL}/api/attendance/batch?ids=${ids.join(',')}`)
+    return handleResponse<Attendance[]>(response)
+  },
+
+  create: async (title: string, date: string): Promise<Attendance> => {
+    const response = await fetch(`${API_BASE_URL}/api/attendance`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: title.trim(), date })
+    })
+    return handleResponse<Attendance>(response)
+  },
+
+  respond: async (id: string, name: string, attending: boolean): Promise<Attendance> => {
+    const response = await fetch(`${API_BASE_URL}/api/attendance/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, attending })
+    })
+    return handleResponse<Attendance>(response)
+  },
+
+  delete: async (adminKey: string, id: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/attendance/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${adminKey}`,
+        'Content-Type': 'application/json'
+      }
+    })
+    return handleResponse<{ message: string }>(response)
+  }
+}
+
 // Re-export types for convenience
-export type { Ballot, Vote, VoteColor, AdminBallot, Dashboard }
+export type { Ballot, Vote, VoteColor, AdminBallot, Dashboard, Attendance }

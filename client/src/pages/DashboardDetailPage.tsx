@@ -4,69 +4,137 @@ import { useDashboards } from '../hooks/useDashboards'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { ArrowLeft, Plus, X, Pencil } from 'lucide-react'
-import { ballotApi, type Ballot } from '../api/client'
+import { ballotApi, attendanceApi, type Ballot, type Attendance } from '../api/client'
 
 export function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { getDashboard, addBallot, removeBallot, updateDashboard } = useDashboards()
+  const { getDashboard, addBallot, removeBallot, addAttendance, removeAttendance, updateDashboard } = useDashboards()
 
   const dashboard = id ? getDashboard(id) : undefined
   const [ballots, setBallots] = useState<Ballot[]>([])
+  const [attendances, setAttendances] = useState<Attendance[]>([])
   const [loading, setLoading] = useState(true)
-  const [newBallotInput, setNewBallotInput] = useState('')
+  const [newItemInput, setNewItemInput] = useState('')
+  const [adding, setAdding] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editedName, setEditedName] = useState(dashboard?.name || '')
 
   useEffect(() => {
     if (dashboard) {
       fetchBallots()
+      fetchAttendances()
       setEditedName(dashboard.name)
     }
-  }, [dashboard?.ballotIds])
+  }, [dashboard?.ballotIds, dashboard?.attendanceIds])
 
   const fetchBallots = async () => {
-    if (!dashboard) return
+    if (!dashboard || dashboard.ballotIds.length === 0) {
+      setBallots([])
+      setLoading(false)
+      return
+    }
 
     setLoading(true)
     try {
-      const ballotPromises = dashboard.ballotIds.map(async (ballotId) => {
-        try {
-          return await ballotApi.getById(ballotId)
-        } catch {
-          return null
-        }
-      })
-
-      const results = await Promise.all(ballotPromises)
-      setBallots(results.filter((b): b is Ballot => b !== null))
+      // Use batch endpoint to fetch all ballots in a single request
+      const results = await ballotApi.getBatch(dashboard.ballotIds)
+      setBallots(results)
     } catch (error) {
       console.error('Error fetching ballots:', error)
+      setBallots([])
     } finally {
       setLoading(false)
     }
   }
 
-  const handleAddBallot = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newBallotInput.trim() || !id) return
+  const fetchAttendances = async () => {
+    if (!dashboard) return
 
-    // Extract ballot ID from URL or use as-is
-    let ballotId = newBallotInput.trim()
-
-    // Handle full URLs
-    if (ballotId.includes('/')) {
-      const parts = ballotId.split('/')
-      ballotId = parts[parts.length - 1]
+    const attendanceIds = dashboard.attendanceIds || []
+    if (attendanceIds.length === 0) {
+      setAttendances([])
+      return
     }
 
-    // Verify the ballot exists
     try {
-      await ballotApi.getById(ballotId)
-      await addBallot(id, ballotId)
-      setNewBallotInput('')
-    } catch {
-      alert('Ballot not found. Please check the ID or URL.')
+      // Use batch endpoint to fetch all attendances in a single request
+      const results = await attendanceApi.getBatch(attendanceIds)
+      setAttendances(results)
+    } catch (error) {
+      console.error('Error fetching attendances:', error)
+      setAttendances([])
+    }
+  }
+
+  const handleAddItem = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newItemInput.trim() || !id) return
+
+    setAdding(true)
+    try {
+      const input = newItemInput.trim()
+
+      // Check if URL contains /attendance/ to determine type
+      const isAttendanceUrl = input.includes('/attendance/')
+
+      // Extract ID from URL or use as-is
+      let itemId = input
+      if (input.includes('/')) {
+        const parts = input.split('/')
+        itemId = parts[parts.length - 1]
+      }
+
+      // If URL indicates attendance, or ID starts with attendance-, try attendance first
+      if (isAttendanceUrl || itemId.startsWith('attendance-')) {
+        try {
+          await attendanceApi.getById(itemId)
+          await addAttendance(id, itemId)
+          setNewItemInput('')
+          return
+        } catch {
+          // Continue to try ballot
+        }
+      }
+
+      // Try ballot first
+      try {
+        await ballotApi.getById(itemId)
+        await addBallot(id, itemId)
+        setNewItemInput('')
+        return
+      } catch {
+        // Continue to try attendance
+      }
+
+      // If ballot fails, try attendance
+      try {
+        await attendanceApi.getById(itemId)
+        await addAttendance(id, itemId)
+        setNewItemInput('')
+        return
+      } catch {
+        // Neither found
+      }
+
+      // Neither found
+      alert('Item not found. Please check the URL or ID.')
+    } catch (error) {
+      alert('Failed to add item. Please try again.')
+    } finally {
+      setAdding(false)
+    }
+  }
+
+  const handleRemoveAttendance = async (attendanceId: string) => {
+    if (!id) return
+    if (window.confirm('Remove this attendance from the dashboard?')) {
+      try {
+        await removeAttendance(id, attendanceId)
+      } catch (error) {
+        console.error('Failed to remove attendance:', error)
+        alert('Failed to remove attendance. Please try again.')
+      }
     }
   }
 
@@ -163,88 +231,153 @@ export function DashboardDetailPage() {
           </div>
         )}
         <p className="text-muted-foreground">
-          {dashboard.ballotIds.length} ballot{dashboard.ballotIds.length !== 1 ? 's' : ''} •
+          {dashboard.ballotIds.length} ballot{dashboard.ballotIds.length !== 1 ? 's' : ''} •{' '}
+          {(dashboard.attendanceIds || []).length} attendance{(dashboard.attendanceIds || []).length !== 1 ? 's' : ''} •
           Last updated {new Date(dashboard.updatedAt).toLocaleDateString()}
         </p>
       </div>
 
       <div className="bg-card text-card-foreground border border-border rounded-lg p-4 mb-6">
-        <h2 className="text-lg font-semibold mb-3">Add Ballot</h2>
-        <form onSubmit={handleAddBallot} className="flex gap-2">
+        <h2 className="text-lg font-semibold mb-3">Add Item</h2>
+        <form onSubmit={handleAddItem} className="flex gap-2">
           <Input
             type="text"
-            value={newBallotInput}
-            onChange={(e) => setNewBallotInput(e.target.value)}
-            placeholder="Paste ballot URL or ID"
+            value={newItemInput}
+            onChange={(e) => setNewItemInput(e.target.value)}
+            placeholder="Paste ballot or attendance URL"
             className="flex-grow"
+            disabled={adding}
           />
           <Button
             type="submit"
+            disabled={adding}
             className="bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700"
           >
             <Plus className="h-4 w-4 mr-2" />
-            Add
+            {adding ? 'Adding...' : 'Add'}
           </Button>
         </form>
       </div>
 
       {loading ? (
-        <div className="text-center py-8">Loading ballots...</div>
-      ) : ballots.length === 0 ? (
+        <div className="text-center py-8">Loading...</div>
+      ) : ballots.length === 0 && attendances.length === 0 ? (
         <div className="text-center py-16 bg-card text-card-foreground border border-border rounded-lg">
           <p className="text-muted-foreground">
-            No ballots in this dashboard yet. Add one above to get started!
+            No ballots or attendances in this dashboard yet. Add one above to get started!
           </p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {ballots.map((ballot) => (
-            <div
-              key={ballot.id}
-              className="bg-card text-card-foreground border border-border rounded-lg p-6"
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex-grow pr-4">
-                  <h3 className="text-lg font-semibold mb-1">
-                    <a
-                      href={`/${ballot.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-foreground hover:text-red-500 hover:underline transition-colors"
-                    >
-                      {ballot.question}
-                    </a>
-                  </h3>
-                  <p className="text-sm text-muted-foreground">
-                    {ballot.votes.length} votes • {countComments(ballot)} comments
-                  </p>
-                </div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleRemoveBallot(ballot.id)}
-                  className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
+        <div className="space-y-6">
+          {ballots.length > 0 && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-foreground">Ballots</h2>
+              <div className="space-y-4">
+                {ballots.map((ballot) => (
+                  <div
+                    key={ballot.id}
+                    className="bg-card text-card-foreground border border-border rounded-lg p-6"
+                  >
+                    <div className="flex items-start justify-between mb-3">
+                      <div className="flex-grow pr-4">
+                        <h3 className="text-lg font-semibold mb-1">
+                          <a
+                            href={`/${ballot.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-foreground hover:text-red-500 hover:underline transition-colors"
+                          >
+                            {ballot.question}
+                          </a>
+                        </h3>
+                        <p className="text-sm text-muted-foreground">
+                          {ballot.votes.length} votes • {countComments(ballot)} comments
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveBallot(ballot.id)}
+                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
 
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-1">
-                  <span className="text-lg">✅</span>
-                  <span className="font-medium">{countVotes(ballot, 'green')}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-lg">⚠️</span>
-                  <span className="font-medium">{countVotes(ballot, 'yellow')}</span>
-                </div>
-                <div className="flex items-center gap-1">
-                  <span className="text-lg">❌</span>
-                  <span className="font-medium">{countVotes(ballot, 'red')}</span>
-                </div>
+                    <div className="flex items-center gap-6">
+                      <div className="flex items-center gap-1">
+                        <span className="text-lg">✅</span>
+                        <span className="font-medium">{countVotes(ballot, 'green')}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-lg">⚠️</span>
+                        <span className="font-medium">{countVotes(ballot, 'yellow')}</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <span className="text-lg">❌</span>
+                        <span className="font-medium">{countVotes(ballot, 'red')}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
-          ))}
+          )}
+
+          {attendances.length > 0 && (
+            <div>
+              <h2 className="text-xl font-semibold mb-4 text-foreground">Attendance</h2>
+              <div className="space-y-4">
+                {attendances.map((attendance) => {
+                  const yesCount = attendance.responses.filter(r => r.attending).length
+                  const noCount = attendance.responses.filter(r => !r.attending).length
+                  return (
+                    <div
+                      key={attendance.id}
+                      className="bg-card text-card-foreground border border-border rounded-lg p-6"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-grow pr-4">
+                          <h3 className="text-lg font-semibold mb-1">
+                            <a
+                              href={`/attendance/${attendance.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-foreground hover:text-red-500 hover:underline transition-colors"
+                            >
+                              {attendance.title}
+                            </a>
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {new Date(attendance.date).toLocaleDateString()} • {attendance.responses.length} responses
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveAttendance(attendance.id)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg">✅</span>
+                          <span className="font-medium">{yesCount} yes</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg">❌</span>
+                          <span className="font-medium">{noCount} no</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

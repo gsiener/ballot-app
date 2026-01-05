@@ -1,18 +1,21 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from "./ui/button"
-import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock } from 'lucide-react'
-import { adminApi, dashboardApi, ApiError, type AdminBallot, type Dashboard } from '../api/client'
+import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock, Users, Calendar } from 'lucide-react'
+import { adminApi, dashboardApi, attendanceApi, ApiError, type AdminBallot, type Dashboard, type Attendance } from '../api/client'
 
 export function AdminPanel() {
   const [searchParams] = useSearchParams()
   const [ballots, setBallots] = useState<AdminBallot[]>([])
   const [dashboards, setDashboards] = useState<Dashboard[]>([])
+  const [attendances, setAttendances] = useState<Attendance[]>([])
   const [loading, setLoading] = useState(true)
   const [authenticated, setAuthenticated] = useState(false)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [deletingDashboard, setDeletingDashboard] = useState<string | null>(null)
+  const [deletingAttendance, setDeletingAttendance] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
 
   const adminKey = searchParams.get('key')
 
@@ -24,11 +27,19 @@ export function AdminPanel() {
 
     fetchAdminBallots()
     fetchDashboards()
+    fetchAttendances()
   }, [adminKey])
 
   useEffect(() => {
     document.title = 'Ballot Admin'
   }, [])
+
+  // Auto-dismiss toast with proper cleanup
+  useEffect(() => {
+    if (!toast) return
+    const timer = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(timer)
+  }, [toast])
 
   const fetchAdminBallots = async () => {
     if (!adminKey) return
@@ -68,14 +79,7 @@ export function AdminPanel() {
 
       // Remove from local state
       setBallots(prev => prev.filter(ballot => ballot.id !== ballotId))
-
-      // Show success message briefly
-      const deletedMessage = document.createElement('div')
-      deletedMessage.textContent = 'Ballot deleted successfully'
-      deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
-      document.body.appendChild(deletedMessage)
-      setTimeout(() => document.body.removeChild(deletedMessage), 3000)
-
+      setToast('Ballot deleted successfully')
     } catch (error) {
       console.error('Error deleting ballot:', error)
       alert('Failed to delete ballot. Please try again.')
@@ -114,6 +118,15 @@ export function AdminPanel() {
     }
   }
 
+  const fetchAttendances = async () => {
+    try {
+      const data = await attendanceApi.getAll()
+      setAttendances(data)
+    } catch (error) {
+      console.error('Error fetching attendances:', error)
+    }
+  }
+
   const handleDeleteDashboard = async (dashboardId: string, dashboardName: string) => {
     if (!adminKey) return
 
@@ -130,14 +143,7 @@ export function AdminPanel() {
 
       // Remove from local state
       setDashboards(prev => prev.filter(dashboard => dashboard.id !== dashboardId))
-
-      // Show success message briefly
-      const deletedMessage = document.createElement('div')
-      deletedMessage.textContent = 'Dashboard deleted successfully'
-      deletedMessage.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50'
-      document.body.appendChild(deletedMessage)
-      setTimeout(() => document.body.removeChild(deletedMessage), 3000)
-
+      setToast('Dashboard deleted successfully')
     } catch (error) {
       console.error('Error deleting dashboard:', error)
       alert('Failed to delete dashboard. Please try again.')
@@ -146,8 +152,49 @@ export function AdminPanel() {
     }
   }
 
+  const handleDeleteAttendance = async (attendanceId: string, attendanceTitle: string) => {
+    if (!adminKey) return
+
+    const confirmDelete = window.confirm(
+      `Are you sure you want to delete the attendance "${attendanceTitle}"?\n\nThis action cannot be undone.`
+    )
+
+    if (!confirmDelete) return
+
+    setDeletingAttendance(attendanceId)
+
+    try {
+      await attendanceApi.delete(adminKey, attendanceId)
+
+      // Remove from local state
+      setAttendances(prev => prev.filter(attendance => attendance.id !== attendanceId))
+      setToast('Attendance deleted successfully')
+    } catch (error) {
+      console.error('Error deleting attendance:', error)
+      alert('Failed to delete attendance. Please try again.')
+    } finally {
+      setDeletingAttendance(null)
+    }
+  }
+
   const countVotesByColor = (ballot: AdminBallot, color: 'green' | 'yellow' | 'red') => {
     return ballot.votes.filter(vote => vote.color === color).length
+  }
+
+  const countAttendanceResponses = (attendance: Attendance) => {
+    const yes = attendance.responses.filter(r => r.attending).length
+    const no = attendance.responses.filter(r => !r.attending).length
+    return { yes, no, total: attendance.responses.length }
+  }
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleDateString('en-US', {
+      weekday: 'short',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric'
+    })
   }
 
   if (loading) {
@@ -195,6 +242,12 @@ export function AdminPanel() {
 
   return (
     <div className="min-h-screen bg-background">
+      {/* Toast notification */}
+      {toast && (
+        <div className="fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded shadow-lg z-50">
+          {toast}
+        </div>
+      )}
       <div className="container mx-auto p-4 max-w-6xl">
         {/* Header */}
         <div className="bg-card text-card-foreground rounded-lg shadow-sm p-6 mb-6 border border-border">
@@ -208,7 +261,7 @@ export function AdminPanel() {
             </div>
             <div className="text-right">
               <p className="text-sm text-green-600 dark:text-green-400 font-medium">✓ Authenticated</p>
-              <p className="text-xs text-muted-foreground">{ballots.length} ballots • {dashboards.length} dashboards</p>
+              <p className="text-xs text-muted-foreground">{ballots.length} ballots • {dashboards.length} dashboards • {attendances.length} attendances</p>
             </div>
           </div>
         </div>
@@ -372,6 +425,79 @@ export function AdminPanel() {
                 </div>
               </div>
             ))
+          )}
+        </div>
+
+        {/* Attendances Section */}
+        <h2 className="text-xl font-bold text-foreground mb-4">Attendances</h2>
+        <div className="space-y-4 mb-8">
+          {attendances.length === 0 ? (
+            <div className="bg-card text-card-foreground rounded-lg shadow-sm p-8 text-center border border-border">
+              <p className="text-muted-foreground">No attendances found</p>
+            </div>
+          ) : (
+            attendances.map(attendance => {
+              const counts = countAttendanceResponses(attendance)
+              return (
+                <div key={attendance.id} className="bg-card text-card-foreground rounded-lg shadow-sm p-6 border border-border">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-grow">
+                      <h3 className="text-lg font-semibold text-foreground mb-2">
+                        {attendance.title}
+                      </h3>
+                      <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
+                        <div className="flex items-center gap-1">
+                          <Calendar className="w-4 h-4" />
+                          <span>{formatDate(attendance.date)}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <Users className="w-4 h-4" />
+                          <span>{counts.total} response{counts.total !== 1 ? 's' : ''}</span>
+                        </div>
+                        <div>
+                          Created {new Date(attendance.createdAt).toLocaleDateString()}
+                        </div>
+                      </div>
+
+                      {/* Response breakdown */}
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="flex items-center gap-1">
+                          <span className="text-green-600">✓</span>
+                          <span className="text-sm">{counts.yes} attending</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-red-600">✗</span>
+                          <span className="text-sm">{counts.no} not attending</span>
+                        </div>
+                      </div>
+
+                      <p className="text-xs text-muted-foreground font-mono">ID: {attendance.id}</p>
+                    </div>
+
+                    <div className="flex items-center gap-2 ml-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(`/attendance/${attendance.id}`, '_blank')}
+                        className="text-primary"
+                      >
+                        View
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => handleDeleteAttendance(attendance.id, attendance.title)}
+                        disabled={deletingAttendance === attendance.id}
+                        className="flex items-center gap-1"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        {deletingAttendance === attendance.id ? 'Deleting...' : 'Delete'}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              )
+            })
           )}
         </div>
 

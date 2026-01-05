@@ -51,8 +51,10 @@ bun run test:all          # All tests including components
 # Deploy backend to Cloudflare Workers
 npx wrangler deploy
 
-# Deploy frontend to Cloudflare Pages
-npx wrangler pages deploy client/dist --project-name ballot-app-client
+# Deploy frontend to Cloudflare Pages (ballot.io domain)
+# IMPORTANT: Use "ballot-app" project, NOT "ballot-app-client"
+# The ballot.io domain is attached to the "ballot-app" project
+npx wrangler pages deploy client/dist --project-name ballot-app
 
 # Set environment secrets
 npx wrangler secret put HONEYCOMB_API_KEY
