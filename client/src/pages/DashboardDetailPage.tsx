@@ -4,18 +4,7 @@ import { useDashboards } from '../hooks/useDashboards'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { ArrowLeft, Plus, X, Pencil } from 'lucide-react'
-
-const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
-
-type Ballot = {
-  id: string
-  question: string
-  votes: Array<{
-    color: 'green' | 'yellow' | 'red'
-    comment?: string
-  }>
-  createdAt: string
-}
+import { ballotApi, type Ballot } from '../api/client'
 
 export function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -43,9 +32,7 @@ export function DashboardDetailPage() {
     try {
       const ballotPromises = dashboard.ballotIds.map(async (ballotId) => {
         try {
-          const response = await fetch(`${API_URL}/${ballotId}`)
-          if (!response.ok) return null
-          return await response.json()
+          return await ballotApi.getById(ballotId)
         } catch {
           return null
         }
@@ -75,16 +62,11 @@ export function DashboardDetailPage() {
 
     // Verify the ballot exists
     try {
-      const response = await fetch(`${API_URL}/${ballotId}`)
-      if (!response.ok) {
-        alert('Ballot not found. Please check the ID or URL.')
-        return
-      }
-
+      await ballotApi.getById(ballotId)
       await addBallot(id, ballotId)
       setNewBallotInput('')
-    } catch (error) {
-      alert('Failed to add ballot. Please try again.')
+    } catch {
+      alert('Ballot not found. Please check the ID or URL.')
     }
   }
 

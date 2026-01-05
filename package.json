@@ -21,7 +21,7 @@
     "build": "bun run build:shared && bun run build:server && bun run build:client",
     "test:client": "cd client && bun run test",
     "test:server": "cd server && bun run test", 
-    "test": "bun run test:server && bun run test:client",
+    "test": "concurrently --group \"bun run test:server\" \"bun run test:client\"",
     "test:all": "bun run test:server && cd client && bun run test:components",
     "postinstall": "bun run build:shared && bun run build:server"
   },

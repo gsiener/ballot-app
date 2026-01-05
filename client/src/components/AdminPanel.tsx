@@ -2,31 +2,7 @@ import { useState, useEffect } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from "./ui/button"
 import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock } from 'lucide-react'
-
-const API_URL = 'https://ballot-app-server.siener.workers.dev/api'
-
-type AdminBallot = {
-  id: string
-  question: string
-  votes: Array<{
-    color: 'green' | 'yellow' | 'red'
-    comment?: string
-    createdAt: string
-  }>
-  createdAt: string
-  voteCount: number
-  commentCount: number
-  lastVote: string | null
-  isPrivate?: boolean
-}
-
-type Dashboard = {
-  id: string
-  name: string
-  ballotIds: string[]
-  createdAt: string
-  updatedAt: string
-}
+import { adminApi, dashboardApi, ApiError, type AdminBallot, type Dashboard } from '../api/client'
 
 export function AdminPanel() {
   const [searchParams] = useSearchParams()
@@ -56,31 +32,21 @@ export function AdminPanel() {
 
   const fetchAdminBallots = async () => {
     if (!adminKey) return
-    
+
     try {
-      const response = await fetch(`${API_URL}/admin/ballots`, {
-        headers: {
-          'Authorization': `Bearer ${adminKey}`,
-          'Content-Type': 'application/json',
-        },
-      })
-      
-      if (response.status === 401) {
-        setAuthenticated(false)
-        setError('Invalid admin key')
-        return
-      }
-      
-      if (!response.ok) throw new Error('Failed to fetch admin data')
-      
-      const data = await response.json()
+      const data = await adminApi.getBallots(adminKey)
       setBallots(data)
       setAuthenticated(true)
       setError(null)
     } catch (error) {
       console.error('Error fetching admin ballots:', error)
-      setError('Failed to load admin data')
-      setAuthenticated(false)
+      if (error instanceof ApiError && error.status === 401) {
+        setAuthenticated(false)
+        setError('Invalid admin key')
+      } else {
+        setError('Failed to load admin data')
+        setAuthenticated(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -98,15 +64,7 @@ export function AdminPanel() {
     setDeleting(ballotId)
 
     try {
-      const response = await fetch(`${API_URL}/admin/ballots/${ballotId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${adminKey}`,
-          'Content-Type': 'application/json',
-        },
-      })
-
-      if (!response.ok) throw new Error('Failed to delete ballot')
+      await adminApi.deleteBallot(adminKey, ballotId)
 
       // Remove from local state
       setBallots(prev => prev.filter(ballot => ballot.id !== ballotId))
@@ -130,18 +88,7 @@ export function AdminPanel() {
     if (!adminKey) return
 
     try {
-      const response = await fetch(`${API_URL}/admin/ballots/${ballotId}`, {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${adminKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ isPrivate: !currentPrivacy }),
-      })
-
-      if (!response.ok) throw new Error('Failed to update privacy')
-
-      const updatedBallot = await response.json()
+      const updatedBallot = await adminApi.togglePrivacy(adminKey, ballotId, !currentPrivacy)
 
       // Update local state
       setBallots(prev =>
@@ -160,9 +107,7 @@ export function AdminPanel() {
 
   const fetchDashboards = async () => {
     try {
-      const response = await fetch(`${API_URL}/dashboards`)
-      if (!response.ok) throw new Error('Failed to fetch dashboards')
-      const data = await response.json()
+      const data = await dashboardApi.getAll()
       setDashboards(data)
     } catch (error) {
       console.error('Error fetching dashboards:', error)
@@ -181,11 +126,7 @@ export function AdminPanel() {
     setDeletingDashboard(dashboardId)
 
     try {
-      const response = await fetch(`${API_URL}/dashboards/${dashboardId}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) throw new Error('Failed to delete dashboard')
+      await dashboardApi.delete(dashboardId)
 
       // Remove from local state
       setDashboards(prev => prev.filter(dashboard => dashboard.id !== dashboardId))

@@ -1,11 +1,9 @@
 import '@testing-library/jest-dom'
 import { JSDOM } from 'jsdom'
 
-// Set up jsdom
+// Set up jsdom with minimal config for faster tests
 const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
-  url: 'http://localhost',
-  pretendToBeVisual: true,
-  resources: 'usable'
+  url: 'http://localhost'
 })
 
 // @ts-ignore

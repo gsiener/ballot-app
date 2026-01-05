@@ -56,12 +56,13 @@ const mockEnv = {
   NODE_ENV: 'test'
 }
 
+// Single top-level beforeEach to reset all mocks
+beforeEach(() => {
+  mockKV.get.mockClear()
+  mockKV.put.mockClear()
+})
+
 describe('Ballot API', () => {
-  beforeEach(() => {
-    // Reset mocks
-    mockKV.get.mockClear()
-    mockKV.put.mockClear()
-  })
 
   describe('GET /api/ballots', () => {
     test('should return all ballots', async () => {
@@ -363,12 +364,6 @@ describe('Date Handling', () => {
 })
 
 describe('Dashboard API', () => {
-  beforeEach(() => {
-    // Reset mocks
-    mockKV.get.mockClear()
-    mockKV.put.mockClear()
-  })
-
   describe('GET /api/dashboards', () => {
     test('should return all dashboards', async () => {
       const mockResponse = [

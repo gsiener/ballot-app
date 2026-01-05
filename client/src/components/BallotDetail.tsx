@@ -2,21 +2,7 @@ import { useState, useEffect } from 'react'
 import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { Copy } from 'lucide-react'
-
-const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
-
-type Vote = {
-  color: 'green' | 'yellow' | 'red'
-  comment?: string
-  createdAt: string
-}
-
-type Ballot = {
-  id: string
-  question: string
-  votes: Vote[]
-  createdAt: string
-}
+import { ballotApi, type Ballot, type VoteColor } from '../api/client'
 
 interface BallotDetailProps {
   ballotId: string
@@ -35,9 +21,7 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
 
   const fetchBallot = async () => {
     try {
-      const response = await fetch(`${API_URL}/${ballotId}`)
-      if (!response.ok) throw new Error('Failed to fetch ballot')
-      const data = await response.json()
+      const data = await ballotApi.getById(ballotId)
       setBallot(data)
     } catch (error) {
       console.error('Error fetching ballot:', error)
@@ -46,28 +30,11 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
     }
   }
 
-  const handleVote = async (color: 'green' | 'yellow' | 'red') => {
+  const handleVote = async (color: VoteColor) => {
     if (!ballot) return
 
-    const newVote: Vote = {
-      color,
-      comment: comment.trim() || undefined,
-      createdAt: new Date().toISOString()
-    }
-
     try {
-      const response = await fetch(`${API_URL}/${ballotId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...ballot,
-          votes: [...ballot.votes, newVote]
-        }),
-      })
-      if (!response.ok) throw new Error('Failed to update ballot')
-      const updatedBallot = await response.json()
+      const updatedBallot = await ballotApi.addVote(ballot, color, comment)
       setBallot(updatedBallot)
       setComment('')
     } catch (error) {

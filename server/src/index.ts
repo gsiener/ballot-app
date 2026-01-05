@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
-import type { ApiResponse, Dashboard } from 'shared/dist'
+import type { ApiResponse, Dashboard, Vote, Ballot, AdminBallot } from 'shared/dist'
 import { initTelemetry, createSpan, addSpanAttributes, recordSpanEvent, setSpanStatus } from './telemetry'
 
 type Bindings = {
@@ -13,20 +13,6 @@ type Variables = {}
 type HonoEnv = {
   Bindings: Bindings
   Variables: Variables
-}
-
-type Vote = {
-  color: 'green' | 'yellow' | 'red'
-  comment?: string
-  createdAt: string
-}
-
-type Ballot = {
-  id: string
-  question: string
-  votes: Vote[]
-  createdAt: string
-  isPrivate?: boolean
 }
 
 const app = new Hono<HonoEnv>()
@@ -119,33 +105,31 @@ async function saveDashboards(kv: KVNamespace, dashboards: Dashboard[]): Promise
 // Admin authentication middleware
 const adminAuth = async (c: any, next: any) => {
   const span = createSpan('admin_auth')
-  
+
   try {
     const authHeader = c.req.header('Authorization')
     const adminKey = c.env.ADMIN_API_KEY
-    
+
     if (!adminKey) {
       addSpanAttributes({
         'auth.error': 'no_admin_key_configured',
         'auth.success': false
       })
       setSpanStatus(span, false, 'Admin key not configured')
-      span.end()
       return c.json({ error: 'Admin functionality not available' }, 500)
     }
-    
+
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       addSpanAttributes({
         'auth.error': 'missing_bearer_token',
         'auth.success': false
       })
       setSpanStatus(span, false, 'Missing authorization header')
-      span.end()
       return c.json({ error: 'Unauthorized' }, 401)
     }
-    
+
     const token = authHeader.substring(7) // Remove 'Bearer ' prefix
-    
+
     if (token !== adminKey) {
       addSpanAttributes({
         'auth.error': 'invalid_token',
@@ -153,20 +137,19 @@ const adminAuth = async (c: any, next: any) => {
       })
       setSpanStatus(span, false, 'Invalid admin token')
       recordSpanEvent('admin_auth_failed', { 'auth.attempt': 'invalid_token' })
-      span.end()
       return c.json({ error: 'Unauthorized' }, 401)
     }
-    
+
     addSpanAttributes({
       'auth.success': true,
       'auth.type': 'admin'
     })
     recordSpanEvent('admin_auth_success', { 'auth.method': 'bearer_token' })
-    
+    setSpanStatus(span, true)
+
     await next()
   } catch (error) {
     setSpanStatus(span, false, `Admin auth error: ${error}`)
-    span.end()
     return c.json({ error: 'Authentication error' }, 500)
   } finally {
     span.end()

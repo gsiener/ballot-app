@@ -1,7 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Dashboard } from '../types/dashboard'
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://ballot-app-server.siener.workers.dev'
+import { dashboardApi, type Dashboard } from '../api/client'
 
 export function useDashboards() {
   const [dashboards, setDashboards] = useState<Dashboard[]>([])
@@ -13,11 +11,7 @@ export function useDashboards() {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetch(`${API_URL}/api/dashboards`)
-      if (!response.ok) {
-        throw new Error('Failed to fetch dashboards')
-      }
-      const data = await response.json()
+      const data = await dashboardApi.getAll()
       setDashboards(data)
     } catch (err) {
       console.error('Error fetching dashboards:', err)
@@ -34,17 +28,7 @@ export function useDashboards() {
 
   const createDashboard = async (name: string): Promise<Dashboard> => {
     try {
-      const response = await fetch(`${API_URL}/api/dashboards`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim() })
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to create dashboard')
-      }
-
-      const newDashboard = await response.json()
+      const newDashboard = await dashboardApi.create(name)
       setDashboards([...dashboards, newDashboard])
       return newDashboard
     } catch (err) {
@@ -60,17 +44,7 @@ export function useDashboards() {
         throw new Error('Dashboard not found')
       }
 
-      const response = await fetch(`${API_URL}/api/dashboards/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updates)
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to update dashboard')
-      }
-
-      const updatedDashboard = await response.json()
+      const updatedDashboard = await dashboardApi.update(id, updates)
       setDashboards(dashboards.map(d => d.id === id ? updatedDashboard : d))
     } catch (err) {
       console.error('Error updating dashboard:', err)
@@ -80,14 +54,7 @@ export function useDashboards() {
 
   const deleteDashboard = async (id: string) => {
     try {
-      const response = await fetch(`${API_URL}/api/dashboards/${id}`, {
-        method: 'DELETE'
-      })
-
-      if (!response.ok) {
-        throw new Error('Failed to delete dashboard')
-      }
-
+      await dashboardApi.delete(id)
       setDashboards(dashboards.filter(d => d.id !== id))
     } catch (err) {
       console.error('Error deleting dashboard:', err)

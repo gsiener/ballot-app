@@ -2,19 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
-
-const API_URL = 'https://ballot-app-server.siener.workers.dev/api/ballots'
-
-type Ballot = {
-  id: string
-  question: string
-  votes: Array<{
-    color: 'green' | 'yellow' | 'red'
-    comment?: string
-  }>
-  createdAt: string
-  isPrivate?: boolean
-}
+import { ballotApi, type Ballot } from '../api/client'
 
 export function BallotList() {
   const navigate = useNavigate()
@@ -29,9 +17,7 @@ export function BallotList() {
 
   const fetchBallots = async () => {
     try {
-      const response = await fetch(API_URL)
-      if (!response.ok) throw new Error('Failed to fetch ballots')
-      const data = await response.json()
+      const data = await ballotApi.getAll()
       setBallots(data)
     } catch (error) {
       console.error('Error fetching ballots:', error)
@@ -46,18 +32,7 @@ export function BallotList() {
     if (!newBallotQuestion.trim()) return
 
     try {
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          question: newBallotQuestion.trim(),
-          isPrivate: isPrivate
-        }),
-      })
-      if (!response.ok) throw new Error('Failed to create ballot')
-      const newBallot = await response.json()
+      const newBallot = await ballotApi.create(newBallotQuestion.trim(), isPrivate)
       setBallots([newBallot, ...ballots])
       setNewBallotQuestion('')
       setIsPrivate(false)
