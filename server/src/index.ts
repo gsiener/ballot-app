@@ -341,24 +341,51 @@ app.put('/api/ballots/:id', async (c) => {
       return c.json({ error: 'Ballot not found' }, 404)
     }
 
-    const originalVoteCount = ballots[ballotIndex]?.votes.length || 0
+    const currentBallot = ballots[ballotIndex]!
+    const currentVersion = currentBallot.version ?? 1
+    const incomingVersion = updatedBallot.version ?? 1
+
+    // Optimistic locking: check version matches
+    if (incomingVersion !== currentVersion) {
+      addSpanAttributes({
+        'ballot.found': true,
+        'version.conflict': true,
+        'version.current': currentVersion,
+        'version.incoming': incomingVersion
+      })
+      recordSpanEvent('version_conflict', {
+        'ballot.id': id,
+        'version.current': currentVersion,
+        'version.incoming': incomingVersion
+      })
+      setSpanStatus(span, false, 'Version conflict - ballot was modified by another request')
+      return c.json({
+        error: 'Version conflict - ballot was modified by another request. Please refresh and try again.',
+        currentVersion
+      }, 409)
+    }
+
+    const originalVoteCount = currentBallot.votes.length
     const newVoteCount = updatedBallot.votes.length
     const votesAdded = newVoteCount - originalVoteCount
 
-    ballots[ballotIndex] = updatedBallot
+    // Increment version on successful update
+    ballots[ballotIndex] = { ...updatedBallot, version: currentVersion + 1 }
     await saveBallots(c.env.BALLOTS_KV, ballots)
 
     addSpanAttributes({
       'ballot.found': true,
       'vote.original_count': originalVoteCount,
       'vote.new_count': newVoteCount,
-      'vote.votes_added': votesAdded
+      'vote.votes_added': votesAdded,
+      'version.new': currentVersion + 1
     })
 
     recordSpanEvent('ballot_updated', {
       'ballot.id': id,
       'votes.added': votesAdded,
-      'votes.total': newVoteCount
+      'votes.total': newVoteCount,
+      'version': currentVersion + 1
     })
 
     return c.json(ballots[ballotIndex])
@@ -777,7 +804,8 @@ app.post('/api/attendance', async (c) => {
       date: date,
       responses: [],
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
+      updatedAt: new Date().toISOString(),
+      version: 1
     }
 
     attendances.push(newAttendance)
@@ -809,7 +837,7 @@ app.put('/api/attendance/:id', async (c) => {
   const id = c.req.param('id')
 
   try {
-    const { name, attending } = await c.req.json()
+    const { name, attending, version: incomingVersion } = await c.req.json()
 
     addSpanAttributes({
       'attendance.id': id,
@@ -859,6 +887,27 @@ app.put('/api/attendance/:id', async (c) => {
     }
 
     const currentAttendance = attendances[attendanceIndex]!
+    const currentVersion = currentAttendance.version ?? 1
+
+    // Optimistic locking: check version if provided
+    if (incomingVersion !== undefined && incomingVersion !== currentVersion) {
+      addSpanAttributes({
+        'attendance.found': true,
+        'version.conflict': true,
+        'version.current': currentVersion,
+        'version.incoming': incomingVersion
+      })
+      recordSpanEvent('version_conflict', {
+        'attendance.id': id,
+        'version.current': currentVersion,
+        'version.incoming': incomingVersion
+      })
+      setSpanStatus(span, false, 'Version conflict - attendance was modified by another request')
+      return c.json({
+        error: 'Version conflict - attendance was modified by another request. Please refresh and try again.',
+        currentVersion
+      }, 409)
+    }
     const trimmedName = name.trim()
 
     // Check if this person already responded (case-insensitive)
@@ -887,6 +936,7 @@ app.put('/api/attendance/:id', async (c) => {
     }
 
     currentAttendance.updatedAt = new Date().toISOString()
+    currentAttendance.version = currentVersion + 1
     attendances[attendanceIndex] = currentAttendance
     await saveAttendances(c.env.BALLOTS_KV, attendances)
 
@@ -894,13 +944,15 @@ app.put('/api/attendance/:id', async (c) => {
       'attendance.found': true,
       'attendance.response_count': currentAttendance.responses.length,
       'response.name': trimmedName,
-      'response.attending': attending
+      'response.attending': attending,
+      'version.new': currentVersion + 1
     })
 
     recordSpanEvent('attendance_response_added', {
       'attendance.id': id,
       'response.attending': attending,
-      'attendance.response_count': currentAttendance.responses.length
+      'attendance.response_count': currentAttendance.responses.length,
+      'version': currentVersion + 1
     })
 
     setSpanStatus(span, true)

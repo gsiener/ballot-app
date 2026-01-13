@@ -17,6 +17,7 @@ export type Ballot = {
   votes: Vote[]
   createdAt: string
   isPrivate?: boolean
+  version?: number  // For optimistic locking - defaults to 1 if not present
 }
 
 export type AdminBallot = Ballot & {
@@ -32,6 +33,7 @@ export type Dashboard = {
   attendanceIds: string[]
   createdAt: string
   updatedAt: string
+  version?: number  // For optimistic locking - defaults to 1 if not present
 }
 
 export type AttendanceResponse = {
@@ -47,4 +49,5 @@ export type Attendance = {
   responses: AttendanceResponse[]
   createdAt: string
   updatedAt: string
+  version?: number  // For optimistic locking - defaults to 1 if not present
 }
