@@ -45,7 +45,7 @@ export function useAttendance() {
       }
 
       const newAttendance = await response.json()
-      setAttendances([newAttendance, ...attendances])
+      setAttendances(prev => [newAttendance, ...prev])
       return newAttendance
     } catch (err) {
       console.error('Error creating attendance:', err)
@@ -82,7 +82,7 @@ export function useAttendance() {
       }
 
       const updatedAttendance = await response.json()
-      setAttendances(attendances.map(a => a.id === id ? updatedAttendance : a))
+      setAttendances(prev => prev.map(a => a.id === id ? updatedAttendance : a))
       return updatedAttendance
     } catch (err) {
       console.error('Error adding response:', err)
@@ -103,7 +103,7 @@ export function useAttendance() {
         throw new Error('Failed to delete attendance')
       }
 
-      setAttendances(attendances.filter(a => a.id !== id))
+      setAttendances(prev => prev.filter(a => a.id !== id))
     } catch (err) {
       console.error('Error deleting attendance:', err)
       throw err
