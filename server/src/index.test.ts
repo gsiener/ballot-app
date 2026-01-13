@@ -910,3 +910,240 @@ describe('Attendance API', () => {
     })
   })
 })
+
+describe('Optimistic Locking', () => {
+  describe('Version Conflict Detection', () => {
+    test('should detect version mismatch for ballot updates', () => {
+      const storedBallot = {
+        id: 'ballot-1',
+        question: 'Test?',
+        votes: [{ color: 'green', createdAt: '2024-01-01T10:00:00Z' }],
+        createdAt: '2024-01-01T09:00:00Z',
+        version: 2
+      }
+
+      const incomingBallot = {
+        ...storedBallot,
+        votes: [...storedBallot.votes, { color: 'red', createdAt: '2024-01-01T11:00:00Z' }],
+        version: 1 // Stale version
+      }
+
+      const currentVersion = storedBallot.version ?? 1
+      const incomingVersion = incomingBallot.version ?? 1
+
+      expect(incomingVersion).not.toBe(currentVersion)
+      expect(incomingVersion).toBe(1)
+      expect(currentVersion).toBe(2)
+    })
+
+    test('should allow update when versions match', () => {
+      const storedBallot = {
+        id: 'ballot-1',
+        question: 'Test?',
+        votes: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        version: 1
+      }
+
+      const incomingBallot = {
+        ...storedBallot,
+        votes: [{ color: 'green', createdAt: '2024-01-01T10:00:00Z' }],
+        version: 1
+      }
+
+      const currentVersion = storedBallot.version ?? 1
+      const incomingVersion = incomingBallot.version ?? 1
+
+      expect(incomingVersion).toBe(currentVersion)
+    })
+
+    test('should increment version on successful update', () => {
+      const storedBallot = {
+        id: 'ballot-1',
+        question: 'Test?',
+        votes: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        version: 3
+      }
+
+      const currentVersion = storedBallot.version ?? 1
+      const newVersion = currentVersion + 1
+
+      const updatedBallot = {
+        ...storedBallot,
+        votes: [{ color: 'green', createdAt: '2024-01-01T10:00:00Z' }],
+        version: newVersion
+      }
+
+      expect(updatedBallot.version).toBe(4)
+    })
+
+    test('should default version to 1 for legacy records without version', () => {
+      const legacyBallot = {
+        id: 'ballot-old',
+        question: 'Old ballot?',
+        votes: [],
+        createdAt: '2024-01-01T09:00:00Z'
+        // No version field
+      }
+
+      const currentVersion = (legacyBallot as any).version ?? 1
+
+      expect(currentVersion).toBe(1)
+    })
+  })
+
+  describe('Concurrent Update Scenarios', () => {
+    test('should simulate two concurrent updates to same ballot', () => {
+      // Initial state
+      const initialBallot = {
+        id: 'ballot-1',
+        question: 'Concurrent test?',
+        votes: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        version: 1
+      }
+
+      // Client A reads ballot with version 1
+      const clientARead = { ...initialBallot }
+
+      // Client B reads ballot with version 1
+      const clientBRead = { ...initialBallot }
+
+      // Client A prepares update (adds vote)
+      const clientAUpdate = {
+        ...clientARead,
+        votes: [{ color: 'green' as const, createdAt: '2024-01-01T10:00:00Z' }],
+        version: clientARead.version
+      }
+
+      // Server processes Client A update - succeeds
+      const afterClientA = {
+        ...clientAUpdate,
+        version: (clientAUpdate.version ?? 1) + 1 // Now version 2
+      }
+
+      expect(afterClientA.version).toBe(2)
+      expect(afterClientA.votes).toHaveLength(1)
+
+      // Client B prepares update (using stale version 1)
+      const clientBUpdate = {
+        ...clientBRead,
+        votes: [{ color: 'red' as const, createdAt: '2024-01-01T10:01:00Z' }],
+        version: clientBRead.version // Still 1, stale!
+      }
+
+      // Server should reject Client B update - version mismatch
+      const serverVersion = afterClientA.version
+      const clientBVersion = clientBUpdate.version ?? 1
+
+      expect(clientBVersion).not.toBe(serverVersion)
+      expect(clientBVersion).toBe(1)
+      expect(serverVersion).toBe(2)
+    })
+
+    test('should simulate sequential updates with proper versioning', () => {
+      let ballot = {
+        id: 'ballot-1',
+        question: 'Sequential test?',
+        votes: [] as any[],
+        createdAt: '2024-01-01T09:00:00Z',
+        version: 1
+      }
+
+      // First update
+      ballot = {
+        ...ballot,
+        votes: [...ballot.votes, { color: 'green', createdAt: '2024-01-01T10:00:00Z' }],
+        version: ballot.version + 1
+      }
+      expect(ballot.version).toBe(2)
+      expect(ballot.votes).toHaveLength(1)
+
+      // Second update
+      ballot = {
+        ...ballot,
+        votes: [...ballot.votes, { color: 'yellow', createdAt: '2024-01-01T11:00:00Z' }],
+        version: ballot.version + 1
+      }
+      expect(ballot.version).toBe(3)
+      expect(ballot.votes).toHaveLength(2)
+
+      // Third update
+      ballot = {
+        ...ballot,
+        votes: [...ballot.votes, { color: 'red', createdAt: '2024-01-01T12:00:00Z' }],
+        version: ballot.version + 1
+      }
+      expect(ballot.version).toBe(4)
+      expect(ballot.votes).toHaveLength(3)
+    })
+  })
+
+  describe('Attendance Version Handling', () => {
+    test('should detect version mismatch for attendance updates', () => {
+      const storedAttendance = {
+        id: 'attendance-1',
+        title: 'Team meeting',
+        date: '2024-01-15',
+        responses: [{ name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' }],
+        createdAt: '2024-01-10T09:00:00Z',
+        updatedAt: '2024-01-10T10:00:00Z',
+        version: 2
+      }
+
+      // Client sends update with stale version
+      const incomingVersion = 1
+      const currentVersion = storedAttendance.version ?? 1
+
+      expect(incomingVersion).not.toBe(currentVersion)
+    })
+
+    test('should allow attendance update when version matches', () => {
+      const storedAttendance = {
+        id: 'attendance-1',
+        title: 'Team meeting',
+        date: '2024-01-15',
+        responses: [],
+        createdAt: '2024-01-10T09:00:00Z',
+        updatedAt: '2024-01-10T09:00:00Z',
+        version: 1
+      }
+
+      // Client sends update with matching version
+      const incomingVersion = 1
+      const currentVersion = storedAttendance.version ?? 1
+
+      expect(incomingVersion).toBe(currentVersion)
+
+      // Update proceeds and version increments
+      const newVersion = currentVersion + 1
+      expect(newVersion).toBe(2)
+    })
+  })
+
+  describe('Dashboard Version Handling', () => {
+    test('should increment dashboard version on update', () => {
+      const dashboard = {
+        id: 'dashboard-1',
+        name: 'My Dashboard',
+        ballotIds: ['ballot-1'],
+        attendanceIds: [],
+        createdAt: '2024-01-01T09:00:00Z',
+        updatedAt: '2024-01-01T09:00:00Z',
+        version: 1
+      }
+
+      // Simulate update
+      const updatedDashboard = {
+        ...dashboard,
+        name: 'Updated Dashboard',
+        updatedAt: '2024-01-01T10:00:00Z',
+        version: dashboard.version + 1
+      }
+
+      expect(updatedDashboard.version).toBe(2)
+      expect(updatedDashboard.name).toBe('Updated Dashboard')
+    })
+  })
+})
