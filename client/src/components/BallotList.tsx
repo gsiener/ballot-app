@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { ballotApi, type Ballot } from '../api/client'
+import { countVotes, countComments } from '../utils/ballot'
 
 export function BallotList() {
   const navigate = useNavigate()
@@ -42,13 +43,18 @@ export function BallotList() {
     }
   }
 
-  const countVotes = (ballot: Ballot, color: 'green' | 'yellow' | 'red') => {
-    return ballot.votes.filter(vote => vote.color === color).length
-  }
-
-  const countComments = (ballot: Ballot) => {
-    return ballot.votes.filter(vote => vote.comment && vote.comment.trim() !== '').length
-  }
+  // Memoize vote stats to avoid recalculating on every render
+  const ballotStats = useMemo(() => {
+    return new Map(ballots.map(ballot => [
+      ballot.id,
+      {
+        green: countVotes(ballot, 'green'),
+        yellow: countVotes(ballot, 'yellow'),
+        red: countVotes(ballot, 'red'),
+        comments: countComments(ballot)
+      }
+    ]))
+  }, [ballots])
 
   if (loading) {
     return (
@@ -91,32 +97,35 @@ export function BallotList() {
       </div>
 
       <div className="space-y-4">
-        {ballots.map(ballot => (
-          <div
-            key={ballot.id}
-            className="bg-card text-card-foreground border border-border rounded-md p-4 hover:shadow-md transition-shadow cursor-pointer"
-            onClick={() => navigate(`/${ballot.id}`)}
-          >
-            <h2 className="text-lg font-semibold text-primary mb-1">{ballot.question}</h2>
-            <p className="text-sm text-muted-foreground mb-2">
-              {ballot.votes.length} votes and {countComments(ballot)} comments
-            </p>
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center">
-                <span className="mr-1">✅</span>
-                <span>{countVotes(ballot, 'green')}</span>
-              </div>
-              <div className="flex items-center">
-                <span className="mr-1">⚠️</span>
-                <span>{countVotes(ballot, 'yellow')}</span>
-              </div>
-              <div className="flex items-center">
-                <span className="mr-1">❌</span>
-                <span>{countVotes(ballot, 'red')}</span>
+        {ballots.map(ballot => {
+          const stats = ballotStats.get(ballot.id)!
+          return (
+            <div
+              key={ballot.id}
+              className="bg-card text-card-foreground border border-border rounded-md p-4 hover:shadow-md transition-shadow cursor-pointer"
+              onClick={() => navigate(`/${ballot.id}`)}
+            >
+              <h2 className="text-lg font-semibold text-primary mb-1">{ballot.question}</h2>
+              <p className="text-sm text-muted-foreground mb-2">
+                {ballot.votes.length} votes and {stats.comments} comments
+              </p>
+              <div className="flex items-center space-x-4">
+                <div className="flex items-center">
+                  <span className="mr-1">✅</span>
+                  <span>{stats.green}</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="mr-1">⚠️</span>
+                  <span>{stats.yellow}</span>
+                </div>
+                <div className="flex items-center">
+                  <span className="mr-1">❌</span>
+                  <span>{stats.red}</span>
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {ballots.length === 0 && (

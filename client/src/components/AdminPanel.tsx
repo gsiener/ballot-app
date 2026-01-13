@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from "./ui/button"
 import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock, Users, Calendar } from 'lucide-react'
 import { adminApi, dashboardApi, attendanceApi, ApiError, type AdminBallot, type Dashboard, type Attendance } from '../api/client'
+import { countVotes, countAttendanceResponses } from '../utils/ballot'
 
 export function AdminPanel() {
   const [searchParams] = useSearchParams()
@@ -177,15 +178,25 @@ export function AdminPanel() {
     }
   }
 
-  const countVotesByColor = (ballot: AdminBallot, color: 'green' | 'yellow' | 'red') => {
-    return ballot.votes.filter(vote => vote.color === color).length
-  }
+  // Memoize ballot stats to avoid recalculating on every render
+  const ballotStats = useMemo(() => {
+    return new Map(ballots.map(ballot => [
+      ballot.id,
+      {
+        green: countVotes(ballot as any, 'green'),
+        yellow: countVotes(ballot as any, 'yellow'),
+        red: countVotes(ballot as any, 'red')
+      }
+    ]))
+  }, [ballots])
 
-  const countAttendanceResponses = (attendance: Attendance) => {
-    const yes = attendance.responses.filter(r => r.attending).length
-    const no = attendance.responses.filter(r => !r.attending).length
-    return { yes, no, total: attendance.responses.length }
-  }
+  // Memoize attendance stats
+  const attendanceStatsMap = useMemo(() => {
+    return new Map(attendances.map(attendance => [
+      attendance.id,
+      countAttendanceResponses(attendance)
+    ]))
+  }, [attendances])
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString)
@@ -313,15 +324,15 @@ export function AdminPanel() {
                     <div className="flex items-center gap-4 mb-4">
                       <div className="flex items-center gap-1">
                         <span>✅</span>
-                        <span className="text-sm">{countVotesByColor(ballot, 'green')}</span>
+                        <span className="text-sm">{ballotStats.get(ballot.id)?.green ?? 0}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <span>⚠️</span>
-                        <span className="text-sm">{countVotesByColor(ballot, 'yellow')}</span>
+                        <span className="text-sm">{ballotStats.get(ballot.id)?.yellow ?? 0}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <span>❌</span>
-                        <span className="text-sm">{countVotesByColor(ballot, 'red')}</span>
+                        <span className="text-sm">{ballotStats.get(ballot.id)?.red ?? 0}</span>
                       </div>
                     </div>
 
@@ -437,7 +448,7 @@ export function AdminPanel() {
             </div>
           ) : (
             attendances.map(attendance => {
-              const counts = countAttendanceResponses(attendance)
+              const counts = attendanceStatsMap.get(attendance.id)!
               return (
                 <div key={attendance.id} className="bg-card text-card-foreground rounded-lg shadow-sm p-6 border border-border">
                   <div className="flex items-start justify-between">

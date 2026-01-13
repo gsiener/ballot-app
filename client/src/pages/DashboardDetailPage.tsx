@@ -1,10 +1,11 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useDashboards } from '../hooks/useDashboards'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { ArrowLeft, Plus, X, Pencil } from 'lucide-react'
 import { ballotApi, attendanceApi, type Ballot, type Attendance } from '../api/client'
+import { countVotes, countComments, countAttendanceResponses } from '../utils/ballot'
 
 export function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -20,13 +21,17 @@ export function DashboardDetailPage() {
   const [isEditing, setIsEditing] = useState(false)
   const [editedName, setEditedName] = useState(dashboard?.name || '')
 
+  // Use stringified IDs to avoid reference comparison issues with arrays
+  const ballotIdsKey = dashboard?.ballotIds?.join(',') ?? ''
+  const attendanceIdsKey = dashboard?.attendanceIds?.join(',') ?? ''
+
   useEffect(() => {
     if (dashboard) {
       fetchBallots()
       fetchAttendances()
       setEditedName(dashboard.name)
     }
-  }, [dashboard?.ballotIds, dashboard?.attendanceIds])
+  }, [ballotIdsKey, attendanceIdsKey])
 
   const fetchBallots = async () => {
     if (!dashboard || dashboard.ballotIds.length === 0) {
@@ -161,13 +166,26 @@ export function DashboardDetailPage() {
     }
   }
 
-  const countVotes = (ballot: Ballot, color: 'green' | 'yellow' | 'red') => {
-    return ballot.votes.filter(vote => vote.color === color).length
-  }
+  // Memoize ballot stats to avoid recalculating on every render
+  const ballotStats = useMemo(() => {
+    return new Map(ballots.map(ballot => [
+      ballot.id,
+      {
+        green: countVotes(ballot, 'green'),
+        yellow: countVotes(ballot, 'yellow'),
+        red: countVotes(ballot, 'red'),
+        comments: countComments(ballot)
+      }
+    ]))
+  }, [ballots])
 
-  const countComments = (ballot: Ballot) => {
-    return ballot.votes.filter(vote => vote.comment && vote.comment.trim() !== '').length
-  }
+  // Memoize attendance stats
+  const attendanceStats = useMemo(() => {
+    return new Map(attendances.map(attendance => [
+      attendance.id,
+      countAttendanceResponses(attendance)
+    ]))
+  }, [attendances])
 
   if (!dashboard) {
     return (
@@ -273,53 +291,56 @@ export function DashboardDetailPage() {
             <div>
               <h2 className="text-xl font-semibold mb-4 text-foreground">Ballots</h2>
               <div className="space-y-4">
-                {ballots.map((ballot) => (
-                  <div
-                    key={ballot.id}
-                    className="bg-card text-card-foreground border border-border rounded-lg p-6"
-                  >
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex-grow pr-4">
-                        <h3 className="text-lg font-semibold mb-1">
-                          <a
-                            href={`/${ballot.id}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-foreground hover:text-red-500 hover:underline transition-colors"
-                          >
-                            {ballot.question}
-                          </a>
-                        </h3>
-                        <p className="text-sm text-muted-foreground">
-                          {ballot.votes.length} votes • {countComments(ballot)} comments
-                        </p>
+                {ballots.map((ballot) => {
+                  const stats = ballotStats.get(ballot.id)!
+                  return (
+                    <div
+                      key={ballot.id}
+                      className="bg-card text-card-foreground border border-border rounded-lg p-6"
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex-grow pr-4">
+                          <h3 className="text-lg font-semibold mb-1">
+                            <a
+                              href={`/${ballot.id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-foreground hover:text-red-500 hover:underline transition-colors"
+                            >
+                              {ballot.question}
+                            </a>
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {ballot.votes.length} votes • {stats.comments} comments
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveBallot(ballot.id)}
+                          className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveBallot(ballot.id)}
-                        className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
 
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-1">
-                        <span className="text-lg">✅</span>
-                        <span className="font-medium">{countVotes(ballot, 'green')}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-lg">⚠️</span>
-                        <span className="font-medium">{countVotes(ballot, 'yellow')}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-lg">❌</span>
-                        <span className="font-medium">{countVotes(ballot, 'red')}</span>
+                      <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg">✅</span>
+                          <span className="font-medium">{stats.green}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg">⚠️</span>
+                          <span className="font-medium">{stats.yellow}</span>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <span className="text-lg">❌</span>
+                          <span className="font-medium">{stats.red}</span>
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           )}
@@ -329,8 +350,7 @@ export function DashboardDetailPage() {
               <h2 className="text-xl font-semibold mb-4 text-foreground">Attendance</h2>
               <div className="space-y-4">
                 {attendances.map((attendance) => {
-                  const yesCount = attendance.responses.filter(r => r.attending).length
-                  const noCount = attendance.responses.filter(r => !r.attending).length
+                  const stats = attendanceStats.get(attendance.id)!
                   return (
                     <div
                       key={attendance.id}
@@ -349,7 +369,7 @@ export function DashboardDetailPage() {
                             </a>
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(attendance.date).toLocaleDateString()} • {attendance.responses.length} responses
+                            {new Date(attendance.date).toLocaleDateString()} • {stats.total} responses
                           </p>
                         </div>
                         <Button
@@ -365,11 +385,11 @@ export function DashboardDetailPage() {
                       <div className="flex items-center gap-6">
                         <div className="flex items-center gap-1">
                           <span className="text-lg">✅</span>
-                          <span className="font-medium">{yesCount} yes</span>
+                          <span className="font-medium">{stats.yes} yes</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <span className="text-lg">❌</span>
-                          <span className="font-medium">{noCount} no</span>
+                          <span className="font-medium">{stats.no} no</span>
                         </div>
                       </div>
                     </div>
