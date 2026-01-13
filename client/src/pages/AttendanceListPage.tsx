@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAttendance } from '../hooks/useAttendance'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import { AttendanceCalendar } from '../components/AttendanceCalendar'
 import { Plus, Users, Calendar } from 'lucide-react'
 
 export function AttendanceListPage() {
@@ -69,6 +70,11 @@ export function AttendanceListPage() {
           New Attendance
         </Button>
       </div>
+
+      <AttendanceCalendar
+        attendances={attendances}
+        onCreateAttendance={createAttendance}
+      />
 
       {showCreateForm && (
         <div className="bg-card text-card-foreground border border-border rounded-lg p-4 mb-6">
