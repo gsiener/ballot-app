@@ -9,6 +9,7 @@ import {
   createDeleteHandler,
   createCreateHandler,
   createUpdateHandler,
+  createBatchHandler,
   type ResourceConfig
 } from './handlers'
 
@@ -150,6 +151,12 @@ const dashboardConfig: ResourceConfig<Dashboard> = {
   saveAll: saveDashboards
 }
 
+const attendanceConfig: ResourceConfig<Attendance> = {
+  name: 'attendance',
+  getAll: getAllAttendances,
+  saveAll: saveAttendances
+}
+
 // Admin authentication middleware
 const adminAuth = async (c: any, next: any) => {
   const span = createSpan('admin_auth')
@@ -207,72 +214,7 @@ app.get('/api/ballots', createListHandler(ballotConfig, {
 }))
 
 // Get multiple ballots by IDs (batch endpoint to avoid N+1 queries)
-app.get('/api/ballots/batch', async (c) => {
-  const span = createSpan('get_ballots_batch')
-
-  try {
-    const idsParam = c.req.query('ids')
-
-    if (!idsParam) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'No IDs provided'
-      })
-      setSpanStatus(span, false, 'IDs query parameter is required')
-      return c.json({ error: 'IDs query parameter is required (e.g., ?ids=id1,id2,id3)' }, 400)
-    }
-
-    const ids = idsParam.split(',').map(id => id.trim()).filter(id => id)
-
-    if (ids.length === 0) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'No valid IDs provided'
-      })
-      setSpanStatus(span, false, 'No valid IDs provided')
-      return c.json({ error: 'No valid IDs provided' }, 400)
-    }
-
-    // Limit batch size to prevent abuse
-    const MAX_BATCH_SIZE = 100
-    if (ids.length > MAX_BATCH_SIZE) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Too many IDs requested'
-      })
-      setSpanStatus(span, false, `Maximum ${MAX_BATCH_SIZE} IDs allowed per request`)
-      return c.json({ error: `Maximum ${MAX_BATCH_SIZE} IDs allowed per request` }, 400)
-    }
-
-    addSpanAttributes({
-      'operation': 'get_ballots_batch',
-      'ballot.requested_count': ids.length
-    })
-
-    const allBallots = await getAllBallots(c.env.BALLOTS_KV)
-    const requestedBallots = ids
-      .map(id => allBallots.find(b => b.id === id))
-      .filter((b): b is Ballot => b !== undefined)
-
-    addSpanAttributes({
-      'ballot.found_count': requestedBallots.length,
-      'ballot.missing_count': ids.length - requestedBallots.length
-    })
-
-    recordSpanEvent('ballots_batch_retrieved', {
-      'ballot.requested_count': ids.length,
-      'ballot.found_count': requestedBallots.length
-    })
-
-    setSpanStatus(span, true)
-    return c.json(requestedBallots)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
+app.get('/api/ballots/batch', createBatchHandler(ballotConfig))
 
 app.get('/api/ballots/:id', createGetByIdHandler(ballotConfig, {
   includeAttributes: (ballot) => ({ 'ballot.vote_count': ballot.votes.length })
@@ -615,72 +557,7 @@ app.delete('/api/dashboards/:id', createDeleteHandler(dashboardConfig, {
 // Attendance endpoints
 
 // Get multiple attendances by IDs (batch endpoint to avoid N+1 queries)
-app.get('/api/attendance/batch', async (c) => {
-  const span = createSpan('get_attendances_batch')
-
-  try {
-    const idsParam = c.req.query('ids')
-
-    if (!idsParam) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'No IDs provided'
-      })
-      setSpanStatus(span, false, 'IDs query parameter is required')
-      return c.json({ error: 'IDs query parameter is required (e.g., ?ids=id1,id2,id3)' }, 400)
-    }
-
-    const ids = idsParam.split(',').map(id => id.trim()).filter(id => id)
-
-    if (ids.length === 0) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'No valid IDs provided'
-      })
-      setSpanStatus(span, false, 'No valid IDs provided')
-      return c.json({ error: 'No valid IDs provided' }, 400)
-    }
-
-    // Limit batch size to prevent abuse
-    const MAX_BATCH_SIZE = 100
-    if (ids.length > MAX_BATCH_SIZE) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Too many IDs requested'
-      })
-      setSpanStatus(span, false, `Maximum ${MAX_BATCH_SIZE} IDs allowed per request`)
-      return c.json({ error: `Maximum ${MAX_BATCH_SIZE} IDs allowed per request` }, 400)
-    }
-
-    addSpanAttributes({
-      'operation': 'get_attendances_batch',
-      'attendance.requested_count': ids.length
-    })
-
-    const allAttendances = await getAllAttendances(c.env.BALLOTS_KV)
-    const requestedAttendances = ids
-      .map(id => allAttendances.find(a => a.id === id))
-      .filter((a): a is Attendance => a !== undefined)
-
-    addSpanAttributes({
-      'attendance.found_count': requestedAttendances.length,
-      'attendance.missing_count': ids.length - requestedAttendances.length
-    })
-
-    recordSpanEvent('attendances_batch_retrieved', {
-      'attendance.requested_count': ids.length,
-      'attendance.found_count': requestedAttendances.length
-    })
-
-    setSpanStatus(span, true)
-    return c.json(requestedAttendances)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
+app.get('/api/attendance/batch', createBatchHandler(attendanceConfig))
 
 app.get('/api/attendance', async (c) => {
   const span = createSpan('get_all_attendances')

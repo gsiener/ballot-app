@@ -304,6 +304,75 @@ export function createUpdateHandler<T extends { id: string; version?: number }>(
   }
 }
 
+/**
+ * Creates a handler for GET /api/{resource}/batch - get multiple items by IDs
+ */
+export function createBatchHandler<T extends { id: string; version?: number }>(
+  config: ResourceConfig<T>,
+  options?: {
+    maxBatchSize?: number
+  }
+) {
+  const MAX_BATCH_SIZE = options?.maxBatchSize ?? 100
+
+  return async (c: Context) => {
+    return withSpan(`get_${config.name}s_batch`, async (span) => {
+      const idsParam = c.req.query('ids')
+
+      if (!idsParam) {
+        addSpanAttributes({
+          'validation.failed': true,
+          'error': 'No IDs provided'
+        })
+        setSpanStatus(span, false, 'IDs query parameter is required')
+        return c.json({ error: 'IDs query parameter is required (e.g., ?ids=id1,id2,id3)' }, 400)
+      }
+
+      const ids = idsParam.split(',').map(id => id.trim()).filter(id => id)
+
+      if (ids.length === 0) {
+        addSpanAttributes({
+          'validation.failed': true,
+          'error': 'No valid IDs provided'
+        })
+        setSpanStatus(span, false, 'No valid IDs provided')
+        return c.json({ error: 'No valid IDs provided' }, 400)
+      }
+
+      if (ids.length > MAX_BATCH_SIZE) {
+        addSpanAttributes({
+          'validation.failed': true,
+          'error': 'Too many IDs requested'
+        })
+        setSpanStatus(span, false, `Maximum ${MAX_BATCH_SIZE} IDs allowed per request`)
+        return c.json({ error: `Maximum ${MAX_BATCH_SIZE} IDs allowed per request` }, 400)
+      }
+
+      addSpanAttributes({
+        'operation': `get_${config.name}s_batch`,
+        [`${config.name}.requested_count`]: ids.length
+      })
+
+      const allItems = await config.getAll(c.env.BALLOTS_KV)
+      const requestedItems = ids
+        .map(id => allItems.find(item => item.id === id))
+        .filter((item): item is T => item !== undefined)
+
+      addSpanAttributes({
+        [`${config.name}.found_count`]: requestedItems.length,
+        [`${config.name}.missing_count`]: ids.length - requestedItems.length
+      })
+
+      recordSpanEvent(`${config.name}s_batch_retrieved`, {
+        [`${config.name}.requested_count`]: ids.length,
+        [`${config.name}.found_count`]: requestedItems.length
+      })
+
+      return c.json(requestedItems)
+    })
+  }
+}
+
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1)
 }
