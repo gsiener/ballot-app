@@ -1,5 +1,5 @@
-import type { Ballot, Vote } from '../api/client'
-import type { Attendance, AttendanceResponse } from 'shared/dist'
+import type { Ballot } from '../api/client'
+import type { Attendance } from 'shared/dist'
 
 export type VoteColor = 'green' | 'yellow' | 'red'
 

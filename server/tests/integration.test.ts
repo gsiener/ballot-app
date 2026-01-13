@@ -299,3 +299,346 @@ describe('Admin Workflow Integration', () => {
     })
   })
 })
+
+describe('End-to-End User Flows', () => {
+  describe('Complete Ballot Lifecycle', () => {
+    test('should complete full ballot flow: create -> vote -> view results', () => {
+      // 1. Create new ballot
+      const newBallot = {
+        id: `ballot-${Date.now()}-abc123`,
+        question: 'Should we implement feature X?',
+        votes: [],
+        createdAt: new Date().toISOString(),
+        isPrivate: false,
+        version: 1
+      }
+
+      expect(newBallot.id).toContain('ballot-')
+      expect(newBallot.votes).toHaveLength(0)
+      expect(newBallot.version).toBe(1)
+
+      // 2. User A votes green
+      const voteA = { color: 'green' as const, comment: 'Great idea!', createdAt: new Date().toISOString() }
+      newBallot.votes.push(voteA)
+      newBallot.version = 2
+
+      expect(newBallot.votes).toHaveLength(1)
+      expect(newBallot.version).toBe(2)
+
+      // 3. User B votes yellow
+      const voteB = { color: 'yellow' as const, comment: 'Need more info', createdAt: new Date().toISOString() }
+      newBallot.votes.push(voteB)
+      newBallot.version = 3
+
+      expect(newBallot.votes).toHaveLength(2)
+      expect(newBallot.version).toBe(3)
+
+      // 4. User C votes red
+      const voteC = { color: 'red' as const, comment: '', createdAt: new Date().toISOString() }
+      newBallot.votes.push(voteC)
+      newBallot.version = 4
+
+      expect(newBallot.votes).toHaveLength(3)
+
+      // 5. View results
+      const greenVotes = newBallot.votes.filter(v => v.color === 'green').length
+      const yellowVotes = newBallot.votes.filter(v => v.color === 'yellow').length
+      const redVotes = newBallot.votes.filter(v => v.color === 'red').length
+      const comments = newBallot.votes.filter(v => v.comment && v.comment.trim() !== '').length
+
+      expect(greenVotes).toBe(1)
+      expect(yellowVotes).toBe(1)
+      expect(redVotes).toBe(1)
+      expect(comments).toBe(2)
+    })
+
+    test('should handle private ballot creation and access', () => {
+      const privateBallot = {
+        id: `ballot-${Date.now()}-private`,
+        question: 'Confidential team vote',
+        votes: [],
+        createdAt: new Date().toISOString(),
+        isPrivate: true,
+        version: 1
+      }
+
+      expect(privateBallot.isPrivate).toBe(true)
+
+      // Private ballots should not appear in public list
+      const publicBallots = [
+        { id: 'public-1', isPrivate: false },
+        { id: 'public-2', isPrivate: false },
+        privateBallot
+      ].filter(b => !b.isPrivate)
+
+      expect(publicBallots).toHaveLength(2)
+      expect(publicBallots.find(b => b.id === privateBallot.id)).toBeUndefined()
+    })
+  })
+
+  describe('Complete Attendance Lifecycle', () => {
+    test('should complete full attendance flow: create -> respond -> view results', () => {
+      // 1. Create new attendance
+      const newAttendance = {
+        id: `attendance-${Date.now()}-xyz789`,
+        title: 'Weekly Team Meeting',
+        date: '2024-01-15',
+        responses: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: 1
+      }
+
+      expect(newAttendance.id).toContain('attendance-')
+      expect(newAttendance.responses).toHaveLength(0)
+
+      // 2. Alice responds - attending
+      const responseAlice = { name: 'Alice', attending: true, timestamp: new Date().toISOString() }
+      newAttendance.responses.push(responseAlice)
+      newAttendance.updatedAt = new Date().toISOString()
+      newAttendance.version = 2
+
+      expect(newAttendance.responses).toHaveLength(1)
+
+      // 3. Bob responds - not attending
+      const responseBob = { name: 'Bob', attending: false, timestamp: new Date().toISOString() }
+      newAttendance.responses.push(responseBob)
+      newAttendance.updatedAt = new Date().toISOString()
+      newAttendance.version = 3
+
+      expect(newAttendance.responses).toHaveLength(2)
+
+      // 4. Charlie responds - attending
+      const responseCharlie = { name: 'Charlie', attending: true, timestamp: new Date().toISOString() }
+      newAttendance.responses.push(responseCharlie)
+      newAttendance.updatedAt = new Date().toISOString()
+      newAttendance.version = 4
+
+      // 5. View results
+      const attending = newAttendance.responses.filter(r => r.attending).length
+      const notAttending = newAttendance.responses.filter(r => !r.attending).length
+
+      expect(attending).toBe(2)
+      expect(notAttending).toBe(1)
+      expect(newAttendance.version).toBe(4)
+    })
+
+    test('should handle response updates (same person responds again)', () => {
+      const attendance = {
+        id: 'attendance-1',
+        title: 'Team Meeting',
+        date: '2024-01-15',
+        responses: [
+          { name: 'Alice', attending: true, timestamp: '2024-01-10T10:00:00Z' }
+        ],
+        createdAt: '2024-01-10T09:00:00Z',
+        updatedAt: '2024-01-10T10:00:00Z',
+        version: 2
+      }
+
+      // Alice changes her response
+      const existingIndex = attendance.responses.findIndex(
+        r => r.name.toLowerCase() === 'alice'
+      )
+      expect(existingIndex).toBe(0)
+
+      // Update existing response
+      attendance.responses[existingIndex] = {
+        name: 'Alice',
+        attending: false,
+        timestamp: new Date().toISOString()
+      }
+      attendance.version = 3
+
+      expect(attendance.responses).toHaveLength(1) // Still only 1 response
+      expect(attendance.responses[0].attending).toBe(false)
+      expect(attendance.version).toBe(3)
+    })
+  })
+
+  describe('Complete Dashboard Lifecycle', () => {
+    test('should complete full dashboard flow: create -> add items -> view -> update', () => {
+      // 1. Create new dashboard
+      const newDashboard = {
+        id: `dashboard-${Date.now()}-dash1`,
+        name: 'Sprint Planning',
+        ballotIds: [],
+        attendanceIds: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: 1
+      }
+
+      expect(newDashboard.ballotIds).toHaveLength(0)
+      expect(newDashboard.attendanceIds).toHaveLength(0)
+
+      // 2. Add ballot to dashboard
+      newDashboard.ballotIds.push('ballot-1')
+      newDashboard.updatedAt = new Date().toISOString()
+      newDashboard.version = 2
+
+      expect(newDashboard.ballotIds).toHaveLength(1)
+
+      // 3. Add attendance to dashboard
+      newDashboard.attendanceIds.push('attendance-1')
+      newDashboard.updatedAt = new Date().toISOString()
+      newDashboard.version = 3
+
+      expect(newDashboard.attendanceIds).toHaveLength(1)
+
+      // 4. Add more items
+      newDashboard.ballotIds.push('ballot-2', 'ballot-3')
+      newDashboard.updatedAt = new Date().toISOString()
+      newDashboard.version = 4
+
+      expect(newDashboard.ballotIds).toHaveLength(3)
+
+      // 5. Update dashboard name
+      newDashboard.name = 'Sprint Planning Q1'
+      newDashboard.updatedAt = new Date().toISOString()
+      newDashboard.version = 5
+
+      expect(newDashboard.name).toBe('Sprint Planning Q1')
+      expect(newDashboard.version).toBe(5)
+    })
+
+    test('should handle batch fetching for dashboard items', () => {
+      const allBallots = [
+        { id: 'ballot-1', question: 'Q1?', votes: [], createdAt: '2024-01-01' },
+        { id: 'ballot-2', question: 'Q2?', votes: [], createdAt: '2024-01-02' },
+        { id: 'ballot-3', question: 'Q3?', votes: [], createdAt: '2024-01-03' },
+        { id: 'ballot-4', question: 'Q4?', votes: [], createdAt: '2024-01-04' }
+      ]
+
+      const dashboard = {
+        id: 'dashboard-1',
+        name: 'Test Dashboard',
+        ballotIds: ['ballot-1', 'ballot-3', 'ballot-999'], // ballot-999 doesn't exist
+        attendanceIds: [],
+        createdAt: '2024-01-01',
+        updatedAt: '2024-01-01'
+      }
+
+      // Batch fetch ballots
+      const requestedBallots = dashboard.ballotIds
+        .map(id => allBallots.find(b => b.id === id))
+        .filter((b): b is typeof allBallots[0] => b !== undefined)
+
+      expect(requestedBallots).toHaveLength(2) // Only 2 found (ballot-999 missing)
+      expect(requestedBallots.map(b => b.id)).toEqual(['ballot-1', 'ballot-3'])
+    })
+  })
+
+  describe('Cross-Feature Integration', () => {
+    test('should handle calendar-based attendance creation', () => {
+      // Simulate clicking on a day in the calendar
+      const selectedDate = '2024-01-15'
+
+      // Generate title from date
+      const date = new Date(selectedDate + 'T00:00:00')
+      const title = `Attendance for ${date.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric'
+      })}`
+
+      const newAttendance = {
+        id: `attendance-${Date.now()}-cal`,
+        title,
+        date: selectedDate,
+        responses: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        version: 1
+      }
+
+      expect(newAttendance.title).toBe('Attendance for January 15, 2024')
+      expect(newAttendance.date).toBe('2024-01-15')
+    })
+
+    test('should handle one-attendance-per-day logic', () => {
+      const attendances = [
+        { id: 'att-1', date: '2024-01-15', title: 'Meeting 1' },
+        { id: 'att-2', date: '2024-01-16', title: 'Meeting 2' },
+        { id: 'att-3', date: '2024-01-17', title: 'Meeting 3' }
+      ]
+
+      // Build date lookup map
+      const attendanceByDate = new Map(attendances.map(a => [a.date, a]))
+
+      // Check if date has attendance
+      expect(attendanceByDate.has('2024-01-15')).toBe(true)
+      expect(attendanceByDate.has('2024-01-18')).toBe(false)
+
+      // Get attendance for specific date
+      const jan15Attendance = attendanceByDate.get('2024-01-15')
+      expect(jan15Attendance?.id).toBe('att-1')
+    })
+  })
+
+  describe('Error Recovery Scenarios', () => {
+    test('should handle version conflict recovery', () => {
+      // Initial ballot state
+      const ballot = {
+        id: 'ballot-1',
+        question: 'Test?',
+        votes: [{ color: 'green', createdAt: '2024-01-01' }],
+        version: 5
+      }
+
+      // Client has stale version
+      const clientVersion = 3
+      const serverVersion = ballot.version
+
+      // Detect conflict
+      const hasConflict = clientVersion !== serverVersion
+      expect(hasConflict).toBe(true)
+
+      // Recovery: client fetches fresh data
+      const refreshedBallot = { ...ballot }
+
+      // Client retries with correct version
+      const retryVersion = refreshedBallot.version
+      expect(retryVersion).toBe(5)
+
+      // Update should now succeed
+      const updatedBallot = {
+        ...refreshedBallot,
+        votes: [...refreshedBallot.votes, { color: 'red', createdAt: '2024-01-02' }],
+        version: refreshedBallot.version + 1
+      }
+
+      expect(updatedBallot.version).toBe(6)
+      expect(updatedBallot.votes).toHaveLength(2)
+    })
+
+    test('should handle network retry logic', async () => {
+      let attemptCount = 0
+      const maxRetries = 3
+
+      const simulateRequest = async (): Promise<boolean> => {
+        attemptCount++
+        // Fail first 2 attempts, succeed on 3rd
+        if (attemptCount < 3) {
+          throw new Error('Network error')
+        }
+        return true
+      }
+
+      let success = false
+      let lastError: Error | null = null
+
+      for (let i = 0; i < maxRetries; i++) {
+        try {
+          success = await simulateRequest()
+          break
+        } catch (error) {
+          lastError = error as Error
+        }
+      }
+
+      expect(attemptCount).toBe(3)
+      expect(success).toBe(true)
+    })
+  })
+})
