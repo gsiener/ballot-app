@@ -190,6 +190,18 @@ export const attendanceApi = {
       }
     })
     return handleResponse<{ message: string }>(response)
+  },
+
+  rename: async (adminKey: string, id: string, title: string): Promise<Attendance> => {
+    const response = await fetch(`${API_BASE_URL}/api/attendance/${id}`, {
+      method: 'PATCH',
+      headers: {
+        'Authorization': `Bearer ${adminKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ title })
+    })
+    return handleResponse<Attendance>(response)
   }
 }
 

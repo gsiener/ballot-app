@@ -262,3 +262,4 @@ See `.github/DEPLOYMENT_SETUP.md` for detailed setup instructions.
 - `TEST_COVERAGE.md` - Detailed test suite documentation
 - `.github/DEPLOYMENT_SETUP.md` - GitHub Actions and Cloudflare setup
 - `CLOUDFLARE_TOKEN_SETUP.md` - Cloudflare API token configuration
+- `docs/solutions/` - Documented solutions and feature implementations

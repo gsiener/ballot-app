@@ -842,6 +842,84 @@ app.put('/api/attendance/:id', async (c) => {
   }
 })
 
+app.patch('/api/attendance/:id', adminAuth, async (c) => {
+  const span = createSpan('admin_rename_attendance')
+  const id = c.req.param('id')
+
+  try {
+    const { title } = await c.req.json()
+
+    addSpanAttributes({
+      'attendance.id': id,
+      'operation': 'admin_rename_attendance',
+      'admin.action': 'rename_attendance'
+    })
+
+    if (!title || typeof title !== 'string' || title.trim() === '') {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Title is required'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'missing_title' })
+      setSpanStatus(span, false, 'Title is required')
+      return c.json({ error: 'Title is required' }, 400)
+    }
+
+    if (title.trim().length > MAX_ATTENDANCE_TITLE_LENGTH) {
+      addSpanAttributes({
+        'validation.failed': true,
+        'error': 'Title too long'
+      })
+      recordSpanEvent('validation_failed', { 'reason': 'title_too_long' })
+      setSpanStatus(span, false, `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less`)
+      return c.json({ error: `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less` }, 400)
+    }
+
+    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+    const attendanceIndex = attendances.findIndex(a => a.id === id)
+
+    if (attendanceIndex === -1) {
+      addSpanAttributes({
+        'attendance.found': false
+      })
+      recordSpanEvent('admin_rename_failed', {
+        'attendance.id': id,
+        'error': 'attendance_not_found'
+      })
+      setSpanStatus(span, false, 'Attendance not found')
+      return c.json({ error: 'Attendance not found' }, 404)
+    }
+
+    const attendance = attendances[attendanceIndex]!
+    const oldTitle = attendance.title
+    attendance.title = title.trim()
+    attendance.updatedAt = new Date().toISOString()
+    attendances[attendanceIndex] = attendance
+    await saveAttendances(c.env.BALLOTS_KV, attendances)
+
+    addSpanAttributes({
+      'attendance.found': true,
+      'attendance.old_title': oldTitle,
+      'attendance.new_title': attendance.title
+    })
+
+    recordSpanEvent('admin_attendance_renamed', {
+      'attendance.id': id,
+      'attendance.old_title': oldTitle,
+      'attendance.new_title': attendance.title,
+      'admin.user': 'authenticated'
+    })
+
+    setSpanStatus(span, true)
+    return c.json(attendance)
+  } catch (error) {
+    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
+    throw error
+  } finally {
+    span.end()
+  }
+})
+
 app.delete('/api/attendance/:id', adminAuth, async (c) => {
   const span = createSpan('admin_delete_attendance')
   const id = c.req.param('id')

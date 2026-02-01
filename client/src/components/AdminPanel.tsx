@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from "./ui/button"
-import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock, Users, Calendar } from 'lucide-react'
+import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock, Users, Calendar, Pencil } from 'lucide-react'
 import { adminApi, dashboardApi, attendanceApi, ApiError, type AdminBallot, type Dashboard, type Attendance } from '../api/client'
 import { countVotes, countAttendanceResponses } from '../utils/ballot'
 
@@ -15,6 +15,8 @@ export function AdminPanel() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [deletingDashboard, setDeletingDashboard] = useState<string | null>(null)
   const [deletingAttendance, setDeletingAttendance] = useState<string | null>(null)
+  const [renamingAttendance, setRenamingAttendance] = useState<string | null>(null)
+  const [renameValue, setRenameValue] = useState<string>('')
   const [error, setError] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
@@ -176,6 +178,39 @@ export function AdminPanel() {
     } finally {
       setDeletingAttendance(null)
     }
+  }
+
+  const handleRenameAttendance = async (attendanceId: string) => {
+    if (!adminKey || !renameValue.trim()) return
+
+    try {
+      const updatedAttendance = await attendanceApi.rename(adminKey, attendanceId, renameValue.trim())
+
+      // Update local state
+      setAttendances(prev =>
+        prev.map(attendance =>
+          attendance.id === attendanceId
+            ? { ...attendance, title: updatedAttendance.title }
+            : attendance
+        )
+      )
+      setToast('Attendance renamed successfully')
+      setRenamingAttendance(null)
+      setRenameValue('')
+    } catch (error) {
+      console.error('Error renaming attendance:', error)
+      alert('Failed to rename attendance. Please try again.')
+    }
+  }
+
+  const startRenaming = (attendanceId: string, currentTitle: string) => {
+    setRenamingAttendance(attendanceId)
+    setRenameValue(currentTitle)
+  }
+
+  const cancelRenaming = () => {
+    setRenamingAttendance(null)
+    setRenameValue('')
   }
 
   // Memoize ballot stats to avoid recalculating on every render
@@ -449,13 +484,44 @@ export function AdminPanel() {
           ) : (
             attendances.map(attendance => {
               const counts = attendanceStatsMap.get(attendance.id)!
+              const isRenaming = renamingAttendance === attendance.id
               return (
                 <div key={attendance.id} className="bg-card text-card-foreground rounded-lg shadow-sm p-6 border border-border">
                   <div className="flex items-start justify-between">
                     <div className="flex-grow">
-                      <h3 className="text-lg font-semibold text-foreground mb-2">
-                        {attendance.title}
-                      </h3>
+                      {isRenaming ? (
+                        <div className="flex items-center gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={renameValue}
+                            onChange={(e) => setRenameValue(e.target.value)}
+                            className="flex-grow px-3 py-1.5 border border-border rounded-md bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                            autoFocus
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleRenameAttendance(attendance.id)
+                              if (e.key === 'Escape') cancelRenaming()
+                            }}
+                          />
+                          <Button
+                            size="sm"
+                            onClick={() => handleRenameAttendance(attendance.id)}
+                            disabled={!renameValue.trim()}
+                          >
+                            Save
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={cancelRenaming}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <h3 className="text-lg font-semibold text-foreground mb-2">
+                          {attendance.title}
+                        </h3>
+                      )}
                       <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
@@ -486,6 +552,18 @@ export function AdminPanel() {
                     </div>
 
                     <div className="flex items-center gap-2 ml-4">
+                      {!isRenaming && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => startRenaming(attendance.id, attendance.title)}
+                          className="flex items-center gap-1"
+                          title="Rename attendance"
+                        >
+                          <Pencil className="w-4 h-4" />
+                          Rename
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
