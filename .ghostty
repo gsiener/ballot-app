@@ -1,0 +1,6 @@
+# Ballot App - Red/Maroon theme
+background = #1f0a0a
+foreground = #f0d8d8
+cursor-color = #ff5555
+selection-background = #4a1a1a
+selection-foreground = #ffffff
