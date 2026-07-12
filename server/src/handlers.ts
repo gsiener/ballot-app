@@ -36,6 +36,14 @@ export interface ResourceConfig<T extends { id: string; version?: number }> {
   saveAll: (kv: KVNamespace, items: T[]) => Promise<void>  // Function to save all items
 }
 
+/** Emit the standard 400 for a failed validation and return the response. */
+function validationFailed(c: Context, span: SpanType, error?: string) {
+  addSpanAttributes({ 'validation.failed': true, 'error': error })
+  recordSpanEvent('validation_failed', { 'reason': error })
+  setSpanStatus(span, false, error)
+  return c.json({ error }, 400)
+}
+
 /**
  * Creates a handler for GET /api/{resource} - list all items
  */
@@ -187,13 +195,7 @@ export function createCreateHandler<T extends { id: string; version?: number }, 
 
       const validation = options.validate(body)
       if (!validation.valid) {
-        addSpanAttributes({
-          'validation.failed': true,
-          'error': validation.error
-        })
-        recordSpanEvent('validation_failed', { 'reason': validation.error })
-        setSpanStatus(span, false, validation.error)
-        return c.json({ error: validation.error }, 400)
+        return validationFailed(c, span, validation.error)
       }
 
       const items = await config.getAll(c.env.BALLOTS_KV)
@@ -231,6 +233,7 @@ export function createUpdateHandler<T extends { id: string; version?: number }>(
   config: ResourceConfig<T>,
   options: {
     applyUpdates: (current: T, body: any) => T
+    validate?: (body: any) => { valid: boolean; error?: string }
     includeAttributes?: (updated: T, original: T) => Record<string, any>
     skipVersionCheck?: boolean  // For updates that don't need optimistic locking
   }
@@ -246,6 +249,13 @@ export function createUpdateHandler<T extends { id: string; version?: number }>(
         'operation': `update_${config.name}`
       })
 
+      if (options.validate) {
+        const validation = options.validate(body)
+        if (!validation.valid) {
+          return validationFailed(c, span, validation.error)
+        }
+      }
+
       const items = await config.getAll(c.env.BALLOTS_KV)
       const index = items.findIndex(i => i.id === id)
 
@@ -258,10 +268,12 @@ export function createUpdateHandler<T extends { id: string; version?: number }>(
 
       const original = items[index]!
       const currentVersion = original.version ?? 1
-      const incomingVersion = body.version ?? 1
+      const incomingVersion = body.version
 
-      // Optimistic locking: check version matches (unless skipped)
-      if (!options.skipVersionCheck && incomingVersion !== currentVersion) {
+      // Optimistic locking is opt-in: only enforced when the client sends a
+      // version. Clients that don't track versions (dashboards, first-time
+      // attendance responders) update without false conflicts.
+      if (!options.skipVersionCheck && incomingVersion !== undefined && incomingVersion !== currentVersion) {
         addSpanAttributes({
           [`${config.name}.found`]: true,
           'version.conflict': true,
@@ -281,21 +293,24 @@ export function createUpdateHandler<T extends { id: string; version?: number }>(
       }
 
       const updated = options.applyUpdates(original, body)
-      // Increment version on successful update
-      const updatedWithVersion = { ...updated, version: currentVersion + 1 }
+      // Bump the version only when optimistic locking is in play; a
+      // versionless update (e.g. an admin rename) must not invalidate the
+      // version a client is holding.
+      const nextVersion = options.skipVersionCheck ? currentVersion : currentVersion + 1
+      const updatedWithVersion = { ...updated, version: nextVersion }
       items[index] = updatedWithVersion
       await config.saveAll(c.env.BALLOTS_KV, items)
 
       const extraAttrs = options.includeAttributes?.(updatedWithVersion, original) || {}
       addSpanAttributes({
         [`${config.name}.found`]: true,
-        'version.new': currentVersion + 1,
+        'version.new': nextVersion,
         ...extraAttrs
       })
 
       recordSpanEvent(`${config.name}_updated`, {
         [`${config.name}.id`]: id,
-        'version': currentVersion + 1,
+        'version': nextVersion,
         ...extraAttrs
       })
 

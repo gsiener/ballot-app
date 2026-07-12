@@ -1,6 +1,7 @@
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import type { ApiResponse, Dashboard, Vote, Ballot, AdminBallot, Attendance, AttendanceResponse } from 'shared/dist'
+import { countComments } from 'shared/dist'
 import { initTelemetry, createSpan, addSpanAttributes, recordSpanEvent, setSpanStatus } from './telemetry'
 import {
   withSpan,
@@ -12,6 +13,7 @@ import {
   createBatchHandler,
   type ResourceConfig
 } from './handlers'
+import { kvCollection } from './kv'
 
 type Bindings = {
   BALLOTS_KV: KVNamespace
@@ -33,6 +35,18 @@ const MAX_DASHBOARD_NAME_LENGTH = 100
 const MAX_ATTENDANCE_TITLE_LENGTH = 200
 const MAX_COMMENT_LENGTH = 1000
 const MAX_NAME_LENGTH = 100
+
+// Shared validator for the recurring "required non-empty string, capped length"
+// shape used across resource routes.
+function requireString(value: unknown, label: string, maxLength: number): { valid: boolean; error?: string } {
+  if (!value || typeof value !== 'string' || value.trim() === '') {
+    return { valid: false, error: `${label} is required` }
+  }
+  if (value.trim().length > maxLength) {
+    return { valid: false, error: `${label} must be ${maxLength} characters or less` }
+  }
+  return { valid: true }
+}
 
 app.use(cors())
 
@@ -69,93 +83,17 @@ const demoData: Ballot[] = [
   }
 ]
 
-// KV Storage helpers
-async function getAllBallots(kv: KVNamespace): Promise<Ballot[]> {
-  try {
-    const ballotsJson = await kv.get('ballots')
-    if (ballotsJson) {
-      return JSON.parse(ballotsJson)
-    } else {
-      await kv.put('ballots', JSON.stringify(demoData))
-      return demoData
-    }
-  } catch (error) {
-    console.error('Error getting ballots from KV:', error)
-    return demoData
-  }
-}
+// KV-backed stores. One deep module (kvCollection) owns the read/parse/
+// fallback and serialize/save logic; each resource is just a key plus a
+// fallback. Ballots seed demo data on first access; the others start empty.
+const ballotStore = kvCollection<Ballot>('ballots', { fallback: () => demoData, seedOnEmpty: true })
+const dashboardStore = kvCollection<Dashboard>('dashboards')
+const attendanceStore = kvCollection<Attendance>('attendances')
 
-async function saveBallots(kv: KVNamespace, ballots: Ballot[]): Promise<void> {
-  try {
-    await kv.put('ballots', JSON.stringify(ballots))
-  } catch (error) {
-    console.error('Error saving ballots to KV:', error)
-    throw error
-  }
-}
-
-async function getAllDashboards(kv: KVNamespace): Promise<Dashboard[]> {
-  try {
-    const dashboardsJson = await kv.get('dashboards')
-    if (dashboardsJson) {
-      return JSON.parse(dashboardsJson)
-    }
-    return []
-  } catch (error) {
-    console.error('Error getting dashboards from KV:', error)
-    return []
-  }
-}
-
-async function saveDashboards(kv: KVNamespace, dashboards: Dashboard[]): Promise<void> {
-  try {
-    await kv.put('dashboards', JSON.stringify(dashboards))
-  } catch (error) {
-    console.error('Error saving dashboards to KV:', error)
-    throw error
-  }
-}
-
-async function getAllAttendances(kv: KVNamespace): Promise<Attendance[]> {
-  try {
-    const attendancesJson = await kv.get('attendances')
-    if (attendancesJson) {
-      return JSON.parse(attendancesJson)
-    }
-    return []
-  } catch (error) {
-    console.error('Error getting attendances from KV:', error)
-    return []
-  }
-}
-
-async function saveAttendances(kv: KVNamespace, attendances: Attendance[]): Promise<void> {
-  try {
-    await kv.put('attendances', JSON.stringify(attendances))
-  } catch (error) {
-    console.error('Error saving attendances to KV:', error)
-    throw error
-  }
-}
-
-// Resource configurations
-const ballotConfig: ResourceConfig<Ballot> = {
-  name: 'ballot',
-  getAll: getAllBallots,
-  saveAll: saveBallots
-}
-
-const dashboardConfig: ResourceConfig<Dashboard> = {
-  name: 'dashboard',
-  getAll: getAllDashboards,
-  saveAll: saveDashboards
-}
-
-const attendanceConfig: ResourceConfig<Attendance> = {
-  name: 'attendance',
-  getAll: getAllAttendances,
-  saveAll: saveAttendances
-}
+// Resource configurations — a config is just a name plus its store's methods.
+const ballotConfig: ResourceConfig<Ballot> = { name: 'ballot', ...ballotStore }
+const dashboardConfig: ResourceConfig<Dashboard> = { name: 'dashboard', ...dashboardStore }
+const attendanceConfig: ResourceConfig<Attendance> = { name: 'attendance', ...attendanceStore }
 
 // Admin authentication middleware
 const adminAuth = async (c: any, next: any) => {
@@ -246,209 +184,55 @@ app.post('/api/ballots', createCreateHandler<Ballot, { question: string; isPriva
   }
 ))
 
-// Ballot update (add vote) - custom handler due to vote tracking logic
-app.put('/api/ballots/:id', async (c) => {
-  const id = c.req.param('id')
-
-  return withSpan('update_ballot', async (span) => {
-    const updatedBallot = await c.req.json()
-
-    addSpanAttributes({
-      'ballot.id': id,
-      'operation': 'update_ballot'
-    })
-
-    // Validate comment lengths in votes
-    if (updatedBallot.votes && Array.isArray(updatedBallot.votes)) {
-      for (const vote of updatedBallot.votes) {
+// Ballot update (add vote). The client sends the full ballot; the factory owns
+// find / 404 / opt-in version-conflict / save. Only the comment-length check
+// and vote-delta telemetry are ballot-specific.
+app.put('/api/ballots/:id', createUpdateHandler(ballotConfig, {
+  validate: (body) => {
+    if (Array.isArray(body.votes)) {
+      for (const vote of body.votes) {
         if (vote.comment && vote.comment.length > MAX_COMMENT_LENGTH) {
-          addSpanAttributes({
-            'validation.failed': true,
-            'error': 'Comment too long'
-          })
-          recordSpanEvent('validation_failed', { 'reason': 'comment_too_long' })
-          setSpanStatus(span, false, `Comment must be ${MAX_COMMENT_LENGTH} characters or less`)
-          return c.json({ error: `Comment must be ${MAX_COMMENT_LENGTH} characters or less` }, 400)
+          return { valid: false, error: `Comment must be ${MAX_COMMENT_LENGTH} characters or less` }
         }
       }
     }
-
-    const ballots = await getAllBallots(c.env.BALLOTS_KV)
-    const ballotIndex = ballots.findIndex(b => b.id === id)
-
-    if (ballotIndex === -1) {
-      addSpanAttributes({ 'ballot.found': false })
-      recordSpanEvent('ballot_not_found', { 'ballot.id': id })
-      setSpanStatus(span, false, 'Ballot not found')
-      return c.json({ error: 'Ballot not found' }, 404)
-    }
-
-    const currentBallot = ballots[ballotIndex]!
-    const currentVersion = currentBallot.version ?? 1
-    const incomingVersion = updatedBallot.version ?? 1
-
-    // Optimistic locking: check version matches
-    if (incomingVersion !== currentVersion) {
-      addSpanAttributes({
-        'ballot.found': true,
-        'version.conflict': true,
-        'version.current': currentVersion,
-        'version.incoming': incomingVersion
-      })
-      recordSpanEvent('version_conflict', {
-        'ballot.id': id,
-        'version.current': currentVersion,
-        'version.incoming': incomingVersion
-      })
-      setSpanStatus(span, false, 'Version conflict - ballot was modified by another request')
-      return c.json({
-        error: 'Version conflict - ballot was modified by another request. Please refresh and try again.',
-        currentVersion
-      }, 409)
-    }
-
-    const originalVoteCount = currentBallot.votes.length
-    const newVoteCount = updatedBallot.votes.length
-    const votesAdded = newVoteCount - originalVoteCount
-
-    // Increment version on successful update
-    ballots[ballotIndex] = { ...updatedBallot, version: currentVersion + 1 }
-    await saveBallots(c.env.BALLOTS_KV, ballots)
-
-    addSpanAttributes({
-      'ballot.found': true,
-      'vote.original_count': originalVoteCount,
-      'vote.new_count': newVoteCount,
-      'vote.votes_added': votesAdded,
-      'version.new': currentVersion + 1
-    })
-
-    recordSpanEvent('ballot_updated', {
-      'ballot.id': id,
-      'votes.added': votesAdded,
-      'votes.total': newVoteCount,
-      'version': currentVersion + 1
-    })
-
-    return c.json(ballots[ballotIndex])
+    return { valid: true }
+  },
+  applyUpdates: (current, body) => ({ ...current, ...body }),
+  includeAttributes: (updated, original) => ({
+    'vote.original_count': original.votes.length,
+    'vote.new_count': updated.votes.length,
+    'vote.votes_added': updated.votes.length - original.votes.length
   })
-})
+}))
 
 // Admin routes
-app.get('/api/admin/ballots', adminAuth, async (c) => {
-  return withSpan('admin_get_all_ballots', async (span) => {
-    const ballots = await getAllBallots(c.env.BALLOTS_KV)
+app.get('/api/admin/ballots', adminAuth, createListHandler(ballotConfig, {
+  sort: (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  transform: (ballots) => ballots.map((ballot): AdminBallot => ({
+    ...ballot,
+    voteCount: ballot.votes.length,
+    commentCount: countComments(ballot),
+    lastVote: ballot.votes.length > 0 ? ballot.votes[ballot.votes.length - 1]!.createdAt : null
+  }))
+}))
 
-    const sortedBallots = ballots.sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    )
-
-    const adminBallots: AdminBallot[] = sortedBallots.map(ballot => ({
-      ...ballot,
-      voteCount: ballot.votes.length,
-      commentCount: ballot.votes.filter(v => v.comment && v.comment.trim() !== '').length,
-      lastVote: ballot.votes.length > 0 ? ballot.votes[ballot.votes.length - 1]!.createdAt : null
-    }))
-
-    addSpanAttributes({
-      'ballot.count': ballots.length,
-      'operation': 'admin_get_all_ballots',
-      'admin.action': 'list_ballots'
-    })
-
-    recordSpanEvent('admin_ballots_accessed', {
-      'ballots.count': ballots.length,
-      'admin.user': 'authenticated'
-    })
-
-    return c.json(adminBallots)
-  })
-})
-
-app.delete('/api/admin/ballots/:id', adminAuth, async (c) => {
-  const id = c.req.param('id')
-
-  return withSpan('admin_delete_ballot', async (span) => {
-    addSpanAttributes({
-      'ballot.id': id,
-      'operation': 'admin_delete_ballot',
-      'admin.action': 'delete_ballot'
-    })
-
-    const ballots = await getAllBallots(c.env.BALLOTS_KV)
-    const ballotIndex = ballots.findIndex(b => b.id === id)
-
-    if (ballotIndex === -1) {
-      addSpanAttributes({ 'ballot.found': false })
-      recordSpanEvent('admin_delete_failed', { 'ballot.id': id, 'error': 'ballot_not_found' })
-      setSpanStatus(span, false, 'Ballot not found')
-      return c.json({ error: 'Ballot not found' }, 404)
+app.delete('/api/admin/ballots/:id', adminAuth, createDeleteHandler(ballotConfig, {
+  buildResponse: (deleted) => ({
+    message: 'Ballot deleted successfully',
+    deletedBallot: {
+      id: deleted.id,
+      question: deleted.question,
+      voteCount: deleted.votes.length
     }
-
-    const deletedBallot = ballots[ballotIndex]!
-    ballots.splice(ballotIndex, 1)
-    await saveBallots(c.env.BALLOTS_KV, ballots)
-
-    addSpanAttributes({
-      'ballot.found': true,
-      'ballot.question': deletedBallot.question,
-      'ballot.vote_count': deletedBallot.votes.length
-    })
-
-    recordSpanEvent('admin_ballot_deleted', {
-      'ballot.id': id,
-      'ballot.question': deletedBallot.question,
-      'ballot.votes': deletedBallot.votes.length,
-      'admin.user': 'authenticated'
-    })
-
-    return c.json({
-      message: 'Ballot deleted successfully',
-      deletedBallot: {
-        id: deletedBallot.id,
-        question: deletedBallot.question,
-        voteCount: deletedBallot.votes.length
-      }
-    })
   })
-})
+}))
 
-app.patch('/api/admin/ballots/:id', adminAuth, async (c) => {
-  const id = c.req.param('id')
-
-  return withSpan('admin_update_ballot', async (span) => {
-    const { isPrivate } = await c.req.json()
-
-    addSpanAttributes({
-      'ballot.id': id,
-      'operation': 'admin_update_ballot',
-      'admin.action': 'toggle_privacy',
-      'ballot.is_private': isPrivate
-    })
-
-    const ballots = await getAllBallots(c.env.BALLOTS_KV)
-    const ballotIndex = ballots.findIndex(b => b.id === id)
-
-    if (ballotIndex === -1) {
-      addSpanAttributes({ 'ballot.found': false })
-      recordSpanEvent('admin_update_failed', { 'ballot.id': id, 'error': 'ballot_not_found' })
-      setSpanStatus(span, false, 'Ballot not found')
-      return c.json({ error: 'Ballot not found' }, 404)
-    }
-
-    ballots[ballotIndex]!.isPrivate = isPrivate
-    await saveBallots(c.env.BALLOTS_KV, ballots)
-
-    addSpanAttributes({ 'ballot.found': true, 'ballot.updated': true })
-    recordSpanEvent('admin_ballot_updated', {
-      'ballot.id': id,
-      'ballot.is_private': isPrivate,
-      'admin.user': 'authenticated'
-    })
-
-    return c.json(ballots[ballotIndex])
-  })
-})
+// Admin: toggle privacy (metadata-only; no version tracking).
+app.patch('/api/admin/ballots/:id', adminAuth, createUpdateHandler(ballotConfig, {
+  skipVersionCheck: true,
+  applyUpdates: (current, body) => ({ ...current, isPrivate: body.isPrivate })
+}))
 
 app.post('/api/admin/ballots/migrate', adminAuth, async (c) => {
   return withSpan('admin_migrate_ballots', async (span) => {
@@ -466,12 +250,12 @@ app.post('/api/admin/ballots/migrate', adminAuth, async (c) => {
       return c.json({ error: 'Ballots must be an array' }, 400)
     }
 
-    const existingBallots = await getAllBallots(c.env.BALLOTS_KV)
+    const existingBallots = await ballotStore.getAll(c.env.BALLOTS_KV)
     const existingIds = new Set(existingBallots.map(b => b.id))
     const newBallots = incomingBallots.filter((b: Ballot) => !existingIds.has(b.id))
     const mergedBallots = [...existingBallots, ...newBallots]
 
-    await saveBallots(c.env.BALLOTS_KV, mergedBallots)
+    await ballotStore.saveAll(c.env.BALLOTS_KV, mergedBallots)
 
     addSpanAttributes({
       'ballots.existing_count': existingBallots.length,
@@ -508,15 +292,7 @@ app.get('/api/dashboards/:id', createGetByIdHandler(dashboardConfig, {
 app.post('/api/dashboards', createCreateHandler<Dashboard, { name: string }>(
   dashboardConfig,
   {
-    validate: (body) => {
-      if (!body.name || typeof body.name !== 'string' || body.name.trim() === '') {
-        return { valid: false, error: 'Dashboard name is required' }
-      }
-      if (body.name.trim().length > MAX_DASHBOARD_NAME_LENGTH) {
-        return { valid: false, error: `Dashboard name must be ${MAX_DASHBOARD_NAME_LENGTH} characters or less` }
-      }
-      return { valid: true }
-    },
+    validate: (body) => requireString(body.name, 'Dashboard name', MAX_DASHBOARD_NAME_LENGTH),
     buildItem: (body) => ({
       id: `dashboard-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       name: body.name.trim(),
@@ -559,426 +335,95 @@ app.delete('/api/dashboards/:id', createDeleteHandler(dashboardConfig, {
 // Get multiple attendances by IDs (batch endpoint to avoid N+1 queries)
 app.get('/api/attendance/batch', createBatchHandler(attendanceConfig))
 
-app.get('/api/attendance', async (c) => {
-  const span = createSpan('get_all_attendances')
+app.get('/api/attendance', createListHandler(attendanceConfig, {
+  sort: (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+}))
 
-  try {
-    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
+app.get('/api/attendance/:id', createGetByIdHandler(attendanceConfig, {
+  includeAttributes: (attendance) => ({ 'attendance.response_count': attendance.responses.length })
+}))
 
-    // Sort by date descending (most recent first)
-    const sortedAttendances = attendances.sort((a, b) =>
-      new Date(b.date).getTime() - new Date(a.date).getTime()
-    )
-
-    addSpanAttributes({
-      'attendance.count': sortedAttendances.length,
-      'operation': 'get_all_attendances'
-    })
-
-    recordSpanEvent('attendances_retrieved', {
-      'attendance.count': sortedAttendances.length
-    })
-
-    setSpanStatus(span, true)
-    return c.json(sortedAttendances)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
-
-app.get('/api/attendance/:id', async (c) => {
-  const span = createSpan('get_single_attendance')
-  const id = c.req.param('id')
-
-  try {
-    addSpanAttributes({
-      'attendance.id': id,
-      'operation': 'get_single_attendance'
-    })
-
-    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
-    const attendance = attendances.find(a => a.id === id)
-
-    if (!attendance) {
-      addSpanAttributes({
-        'attendance.found': false
-      })
-      recordSpanEvent('attendance_not_found', { 'attendance.id': id })
-      setSpanStatus(span, false, 'Attendance not found')
-      return c.json({ error: 'Attendance not found' }, 404)
-    }
-
-    addSpanAttributes({
-      'attendance.found': true,
-      'attendance.response_count': attendance.responses.length
-    })
-
-    recordSpanEvent('attendance_retrieved', {
-      'attendance.id': id,
-      'attendance.response_count': attendance.responses.length
-    })
-
-    setSpanStatus(span, true)
-    return c.json(attendance)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
-
-app.post('/api/attendance', async (c) => {
-  const span = createSpan('create_attendance')
-
-  try {
-    const { title, date } = await c.req.json()
-
-    addSpanAttributes({
-      'operation': 'create_attendance',
-      'title.provided': !!title,
-      'date.provided': !!date
-    })
-
-    if (!title || typeof title !== 'string' || title.trim() === '') {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Title is required'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'missing_title' })
-      setSpanStatus(span, false, 'Title is required')
-      return c.json({ error: 'Title is required' }, 400)
-    }
-
-    if (title.trim().length > MAX_ATTENDANCE_TITLE_LENGTH) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Title too long'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'title_too_long' })
-      setSpanStatus(span, false, `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less`)
-      return c.json({ error: `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less` }, 400)
-    }
-
-    if (!date || typeof date !== 'string') {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Date is required'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'missing_date' })
-      setSpanStatus(span, false, 'Date is required')
-      return c.json({ error: 'Date is required' }, 400)
-    }
-
-    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
-
-    const newAttendance: Attendance = {
+app.post('/api/attendance', createCreateHandler<Attendance, { title: string; date: string }>(
+  attendanceConfig,
+  {
+    validate: (body) => {
+      const title = requireString(body.title, 'Title', MAX_ATTENDANCE_TITLE_LENGTH)
+      if (!title.valid) return title
+      if (!body.date || typeof body.date !== 'string') {
+        return { valid: false, error: 'Date is required' }
+      }
+      return { valid: true }
+    },
+    buildItem: (body) => ({
       id: `attendance-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-      title: title.trim(),
-      date: date,
+      title: body.title.trim(),
+      date: body.date,
       responses: [],
       createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      version: 1
-    }
-
-    attendances.push(newAttendance)
-    await saveAttendances(c.env.BALLOTS_KV, attendances)
-
-    addSpanAttributes({
-      'attendance.id': newAttendance.id,
-      'attendance.title_length': title.trim().length,
-      'attendances.total_count': attendances.length
-    })
-
-    recordSpanEvent('attendance_created', {
-      'attendance.id': newAttendance.id,
-      'attendances.total_count': attendances.length
-    })
-
-    setSpanStatus(span, true)
-    return c.json(newAttendance, 201)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
+      updatedAt: new Date().toISOString()
+    }),
+    includeAttributes: (attendance) => ({ 'attendance.title_length': attendance.title.length })
   }
-})
+))
 
-app.put('/api/attendance/:id', async (c) => {
-  const span = createSpan('update_attendance')
-  const id = c.req.param('id')
-
-  try {
-    const { name, attending, version: incomingVersion } = await c.req.json()
-
-    addSpanAttributes({
-      'attendance.id': id,
-      'operation': 'update_attendance'
-    })
-
-    if (!name || typeof name !== 'string' || name.trim() === '') {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Name is required'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'missing_name' })
-      setSpanStatus(span, false, 'Name is required')
-      return c.json({ error: 'Name is required' }, 400)
+// Add or update a response. Optimistic locking is opt-in via `version`; the
+// factory owns find / 404 / version-conflict / save, so only the responder
+// merge (case-insensitive) lives here.
+app.put('/api/attendance/:id', createUpdateHandler(attendanceConfig, {
+  validate: (body) => {
+    const name = requireString(body.name, 'Name', MAX_NAME_LENGTH)
+    if (!name.valid) return name
+    if (typeof body.attending !== 'boolean') {
+      return { valid: false, error: 'Attending must be true or false' }
     }
-
-    if (name.trim().length > MAX_NAME_LENGTH) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Name too long'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'name_too_long' })
-      setSpanStatus(span, false, `Name must be ${MAX_NAME_LENGTH} characters or less`)
-      return c.json({ error: `Name must be ${MAX_NAME_LENGTH} characters or less` }, 400)
-    }
-
-    if (typeof attending !== 'boolean') {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Attending must be true or false'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'invalid_attending' })
-      setSpanStatus(span, false, 'Attending must be true or false')
-      return c.json({ error: 'Attending must be true or false' }, 400)
-    }
-
-    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
-    const attendanceIndex = attendances.findIndex(a => a.id === id)
-
-    if (attendanceIndex === -1) {
-      addSpanAttributes({
-        'attendance.found': false
-      })
-      recordSpanEvent('attendance_not_found', { 'attendance.id': id })
-      setSpanStatus(span, false, 'Attendance not found')
-      return c.json({ error: 'Attendance not found' }, 404)
-    }
-
-    const currentAttendance = attendances[attendanceIndex]!
-    const currentVersion = currentAttendance.version ?? 1
-
-    // Optimistic locking: check version if provided
-    if (incomingVersion !== undefined && incomingVersion !== currentVersion) {
-      addSpanAttributes({
-        'attendance.found': true,
-        'version.conflict': true,
-        'version.current': currentVersion,
-        'version.incoming': incomingVersion
-      })
-      recordSpanEvent('version_conflict', {
-        'attendance.id': id,
-        'version.current': currentVersion,
-        'version.incoming': incomingVersion
-      })
-      setSpanStatus(span, false, 'Version conflict - attendance was modified by another request')
-      return c.json({
-        error: 'Version conflict - attendance was modified by another request. Please refresh and try again.',
-        currentVersion
-      }, 409)
-    }
-    const trimmedName = name.trim()
-
-    // Check if this person already responded (case-insensitive)
-    const existingResponseIndex = currentAttendance.responses.findIndex(
+    return { valid: true }
+  },
+  applyUpdates: (current, body) => {
+    const trimmedName = body.name.trim()
+    const responses = [...current.responses]
+    const existingIndex = responses.findIndex(
       r => r.name.toLowerCase() === trimmedName.toLowerCase()
     )
-
     const newResponse: AttendanceResponse = {
       name: trimmedName,
-      attending: attending,
+      attending: body.attending,
       timestamp: new Date().toISOString()
     }
-
-    if (existingResponseIndex !== -1) {
-      // Update existing response
-      currentAttendance.responses[existingResponseIndex] = newResponse
-      addSpanAttributes({
-        'response.updated': true
-      })
+    if (existingIndex !== -1) {
+      responses[existingIndex] = newResponse
     } else {
-      // Add new response
-      currentAttendance.responses.push(newResponse)
-      addSpanAttributes({
-        'response.updated': false
-      })
+      responses.push(newResponse)
     }
+    return { ...current, responses, updatedAt: new Date().toISOString() }
+  },
+  includeAttributes: (attendance) => ({ 'attendance.response_count': attendance.responses.length })
+}))
 
-    currentAttendance.updatedAt = new Date().toISOString()
-    currentAttendance.version = currentVersion + 1
-    attendances[attendanceIndex] = currentAttendance
-    await saveAttendances(c.env.BALLOTS_KV, attendances)
+// Admin: rename an attendance (title only; no version tracking needed).
+app.patch('/api/attendance/:id', adminAuth, createUpdateHandler(attendanceConfig, {
+  skipVersionCheck: true,
+  validate: (body) => requireString(body.title, 'Title', MAX_ATTENDANCE_TITLE_LENGTH),
+  applyUpdates: (current, body) => ({
+    ...current,
+    title: body.title.trim(),
+    updatedAt: new Date().toISOString()
+  }),
+  includeAttributes: (attendance) => ({ 'attendance.new_title': attendance.title })
+}))
 
-    addSpanAttributes({
-      'attendance.found': true,
-      'attendance.response_count': currentAttendance.responses.length,
-      'response.name': trimmedName,
-      'response.attending': attending,
-      'version.new': currentVersion + 1
-    })
-
-    recordSpanEvent('attendance_response_added', {
-      'attendance.id': id,
-      'response.attending': attending,
-      'attendance.response_count': currentAttendance.responses.length,
-      'version': currentVersion + 1
-    })
-
-    setSpanStatus(span, true)
-    return c.json(currentAttendance)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
-
-app.patch('/api/attendance/:id', adminAuth, async (c) => {
-  const span = createSpan('admin_rename_attendance')
-  const id = c.req.param('id')
-
-  try {
-    const { title } = await c.req.json()
-
-    addSpanAttributes({
-      'attendance.id': id,
-      'operation': 'admin_rename_attendance',
-      'admin.action': 'rename_attendance'
-    })
-
-    if (!title || typeof title !== 'string' || title.trim() === '') {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Title is required'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'missing_title' })
-      setSpanStatus(span, false, 'Title is required')
-      return c.json({ error: 'Title is required' }, 400)
+// Admin: delete an attendance.
+app.delete('/api/attendance/:id', adminAuth, createDeleteHandler(attendanceConfig, {
+  buildResponse: (deleted) => ({
+    message: 'Attendance deleted successfully',
+    deletedAttendance: {
+      id: deleted.id,
+      title: deleted.title,
+      responseCount: deleted.responses.length
     }
+  })
+}))
 
-    if (title.trim().length > MAX_ATTENDANCE_TITLE_LENGTH) {
-      addSpanAttributes({
-        'validation.failed': true,
-        'error': 'Title too long'
-      })
-      recordSpanEvent('validation_failed', { 'reason': 'title_too_long' })
-      setSpanStatus(span, false, `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less`)
-      return c.json({ error: `Title must be ${MAX_ATTENDANCE_TITLE_LENGTH} characters or less` }, 400)
-    }
-
-    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
-    const attendanceIndex = attendances.findIndex(a => a.id === id)
-
-    if (attendanceIndex === -1) {
-      addSpanAttributes({
-        'attendance.found': false
-      })
-      recordSpanEvent('admin_rename_failed', {
-        'attendance.id': id,
-        'error': 'attendance_not_found'
-      })
-      setSpanStatus(span, false, 'Attendance not found')
-      return c.json({ error: 'Attendance not found' }, 404)
-    }
-
-    const attendance = attendances[attendanceIndex]!
-    const oldTitle = attendance.title
-    attendance.title = title.trim()
-    attendance.updatedAt = new Date().toISOString()
-    attendances[attendanceIndex] = attendance
-    await saveAttendances(c.env.BALLOTS_KV, attendances)
-
-    addSpanAttributes({
-      'attendance.found': true,
-      'attendance.old_title': oldTitle,
-      'attendance.new_title': attendance.title
-    })
-
-    recordSpanEvent('admin_attendance_renamed', {
-      'attendance.id': id,
-      'attendance.old_title': oldTitle,
-      'attendance.new_title': attendance.title,
-      'admin.user': 'authenticated'
-    })
-
-    setSpanStatus(span, true)
-    return c.json(attendance)
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
-
-app.delete('/api/attendance/:id', adminAuth, async (c) => {
-  const span = createSpan('admin_delete_attendance')
-  const id = c.req.param('id')
-
-  try {
-    addSpanAttributes({
-      'attendance.id': id,
-      'operation': 'admin_delete_attendance',
-      'admin.action': 'delete_attendance'
-    })
-
-    const attendances = await getAllAttendances(c.env.BALLOTS_KV)
-    const attendanceIndex = attendances.findIndex(a => a.id === id)
-
-    if (attendanceIndex === -1) {
-      addSpanAttributes({
-        'attendance.found': false
-      })
-      recordSpanEvent('admin_delete_failed', {
-        'attendance.id': id,
-        'error': 'attendance_not_found'
-      })
-      setSpanStatus(span, false, 'Attendance not found')
-      return c.json({ error: 'Attendance not found' }, 404)
-    }
-
-    const deletedAttendance = attendances[attendanceIndex]!
-    attendances.splice(attendanceIndex, 1)
-    await saveAttendances(c.env.BALLOTS_KV, attendances)
-
-    addSpanAttributes({
-      'attendance.found': true,
-      'attendance.title': deletedAttendance.title,
-      'attendance.response_count': deletedAttendance.responses.length
-    })
-
-    recordSpanEvent('admin_attendance_deleted', {
-      'attendance.id': id,
-      'attendance.title': deletedAttendance.title,
-      'attendance.responses': deletedAttendance.responses.length,
-      'admin.user': 'authenticated'
-    })
-
-    setSpanStatus(span, true)
-    return c.json({
-      message: 'Attendance deleted successfully',
-      deletedAttendance: {
-        id: deletedAttendance.id,
-        title: deletedAttendance.title,
-        responseCount: deletedAttendance.responses.length
-      }
-    })
-  } catch (error) {
-    setSpanStatus(span, false, error instanceof Error ? error.message : 'Unknown error')
-    throw error
-  } finally {
-    span.end()
-  }
-})
+export { app }
 
 export default {
   fetch: app.fetch,
