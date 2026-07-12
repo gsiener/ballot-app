@@ -4,6 +4,7 @@ import { Button } from "./ui/button"
 import { Trash2, AlertTriangle, Shield, Eye, MessageSquare, Lock, Unlock, Users, Calendar, Pencil } from 'lucide-react'
 import { adminApi, dashboardApi, attendanceApi, ApiError, type AdminBallot, type Dashboard, type Attendance } from '../api/client'
 import { countVotes, countAttendanceResponses } from '../utils/ballot'
+import { formatMeetingDate } from 'shared/dist'
 
 export function AdminPanel() {
   const [searchParams] = useSearchParams()
@@ -232,16 +233,6 @@ export function AdminPanel() {
       countAttendanceResponses(attendance)
     ]))
   }, [attendances])
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00')
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    })
-  }
 
   if (loading) {
     return (
@@ -525,7 +516,7 @@ export function AdminPanel() {
                       <div className="flex items-center gap-6 text-sm text-muted-foreground mb-4">
                         <div className="flex items-center gap-1">
                           <Calendar className="w-4 h-4" />
-                          <span>{formatDate(attendance.date)}</span>
+                          <span>{formatMeetingDate(attendance.date, 'compact')}</span>
                         </div>
                         <div className="flex items-center gap-1">
                           <Users className="w-4 h-4" />

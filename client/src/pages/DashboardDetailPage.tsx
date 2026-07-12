@@ -6,6 +6,7 @@ import { Input } from '../components/ui/input'
 import { ArrowLeft, Plus, X, Pencil } from 'lucide-react'
 import { ballotApi, attendanceApi, type Ballot, type Attendance } from '../api/client'
 import { countVotes, countComments, countAttendanceResponses } from '../utils/ballot'
+import { formatMeetingDate } from 'shared/dist'
 
 export function DashboardDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -369,7 +370,7 @@ export function DashboardDetailPage() {
                             </a>
                           </h3>
                           <p className="text-sm text-muted-foreground">
-                            {new Date(attendance.date).toLocaleDateString()} • {stats.total} responses
+                            {formatMeetingDate(attendance.date, 'compact')} • {stats.total} responses
                           </p>
                         </div>
                         <Button

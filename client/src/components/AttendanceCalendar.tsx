@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Button } from './ui/button'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '../lib/utils'
-import type { Attendance } from 'shared/dist'
+import { formatMeetingDate, toMeetingDateString, type Attendance } from 'shared/dist'
 
 interface AttendanceCalendarProps {
   attendances: Attendance[]
@@ -15,22 +15,6 @@ interface CalendarDay {
   dateStr: string
   isCurrentMonth: boolean
   isToday: boolean
-}
-
-function formatDateString(date: Date): string {
-  const year = date.getFullYear()
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${year}-${month}-${day}`
-}
-
-function formatAttendanceTitle(dateStr: string): string {
-  const date = new Date(dateStr + 'T00:00:00')
-  return `Attendance for ${date.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric'
-  })}`
 }
 
 function isSameDay(d1: Date, d2: Date): boolean {
@@ -74,7 +58,7 @@ export function AttendanceCalendar({ attendances, onCreateAttendance }: Attendan
       const date = new Date(year, month - 1, day)
       days.push({
         date,
-        dateStr: formatDateString(date),
+        dateStr: toMeetingDateString(date),
         isCurrentMonth: false,
         isToday: false
       })
@@ -85,7 +69,7 @@ export function AttendanceCalendar({ attendances, onCreateAttendance }: Attendan
       const date = new Date(year, month, day)
       days.push({
         date,
-        dateStr: formatDateString(date),
+        dateStr: toMeetingDateString(date),
         isCurrentMonth: true,
         isToday: isSameDay(date, today)
       })
@@ -97,7 +81,7 @@ export function AttendanceCalendar({ attendances, onCreateAttendance }: Attendan
       const date = new Date(year, month + 1, day)
       days.push({
         date,
-        dateStr: formatDateString(date),
+        dateStr: toMeetingDateString(date),
         isCurrentMonth: false,
         isToday: false
       })
@@ -121,7 +105,7 @@ export function AttendanceCalendar({ attendances, onCreateAttendance }: Attendan
     } else {
       setIsCreating(dateStr)
       try {
-        const title = formatAttendanceTitle(dateStr)
+        const title = `Attendance for ${formatMeetingDate(dateStr, 'long')}`
         const newAttendance = await onCreateAttendance(title, dateStr)
         navigate(`/attendance/${newAttendance.id}`)
       } catch (error) {
