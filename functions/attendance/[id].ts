@@ -1,13 +1,6 @@
-const API_URL = 'https://ballot-app-server.siener.workers.dev/api'
+import { formatMeetingDate, countAttendanceResponses, type Attendance } from 'shared/dist'
 
-interface Attendance {
-  id: string
-  title: string
-  date: string
-  responses: { name: string; attending: boolean; timestamp: string }[]
-  createdAt: string
-  updatedAt: string
-}
+const API_URL = 'https://ballot-app-server.siener.workers.dev/api'
 
 function isBot(userAgent: string): boolean {
   const botPatterns = [
@@ -28,16 +21,6 @@ function isBot(userAgent: string): boolean {
   return botPatterns.some(pattern =>
     userAgent.toLowerCase().includes(pattern.toLowerCase())
   )
-}
-
-function formatDate(dateString: string): string {
-  const date = new Date(dateString)
-  return date.toLocaleDateString('en-US', {
-    weekday: 'long',
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric'
-  })
 }
 
 export const onRequest: PagesFunction = async (context) => {
@@ -62,12 +45,10 @@ export const onRequest: PagesFunction = async (context) => {
 
     const attendance: Attendance = await response.json()
 
-    const yesCount = attendance.responses.filter(r => r.attending).length
-    const noCount = attendance.responses.filter(r => !r.attending).length
-    const totalResponses = attendance.responses.length
+    const { yes: yesCount, no: noCount, total: totalResponses } = countAttendanceResponses(attendance)
 
     const title = `${attendance.title} - Attendance`
-    const description = `${formatDate(attendance.date)} | ${yesCount} attending, ${noCount} not attending (${totalResponses} responses)`
+    const description = `${formatMeetingDate(attendance.date, 'full')} | ${yesCount} attending, ${noCount} not attending (${totalResponses} responses)`
     const url = `https://ballot.io/attendance/${attendance.id}`
 
     const html = `<!doctype html>

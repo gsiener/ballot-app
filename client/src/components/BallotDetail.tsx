@@ -3,6 +3,7 @@ import { Button } from "./ui/button"
 import { Textarea } from "./ui/textarea"
 import { Copy } from 'lucide-react'
 import { ballotApi, type Ballot, type VoteColor } from '../api/client'
+import { countVotes } from 'shared/dist'
 
 interface BallotDetailProps {
   ballotId: string
@@ -40,10 +41,6 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
     } catch (error) {
       console.error('Error updating ballot:', error)
     }
-  }
-
-  const countVotes = (color: 'green' | 'yellow' | 'red') => {
-    return ballot?.votes.filter(v => v.color === color).length || 0
   }
 
   if (loading) {
@@ -99,7 +96,7 @@ export function BallotDetail({ ballotId, onBack }: BallotDetailProps) {
           {['green', 'yellow', 'red'].map((color) => (
             <div key={color} className="text-center">
               <div className={`w-24 h-24 rounded-full border-4 ${color === 'green' ? 'border-green-500' : color === 'yellow' ? 'border-yellow-500' : 'border-red-500'} flex items-center justify-center`}>
-                <span className="text-4xl font-bold">{countVotes(color as 'green' | 'yellow' | 'red')}</span>
+                <span className="text-4xl font-bold">{countVotes(ballot, color as VoteColor)}</span>
               </div>
             </div>
           ))}
