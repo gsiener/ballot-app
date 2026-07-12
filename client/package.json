@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "bun test src/utils/",
+    "test": "bun test src/utils/ src/api/",
     "test:components": "bun test src/components/ --env=jsdom"
   },
   "dependencies": {

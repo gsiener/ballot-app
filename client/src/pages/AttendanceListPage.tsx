@@ -5,6 +5,7 @@ import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { AttendanceCalendar } from '../components/AttendanceCalendar'
 import { Plus, Users, Calendar } from 'lucide-react'
+import { formatMeetingDate, countAttendanceResponses } from 'shared/dist'
 
 export function AttendanceListPage() {
   const navigate = useNavigate()
@@ -27,22 +28,6 @@ export function AttendanceListPage() {
       console.error('Failed to create attendance:', error)
       alert('Failed to create attendance. Please try again.')
     }
-  }
-
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00')
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
-  const countResponses = (responses: { attending: boolean }[]) => {
-    const yes = responses.filter(r => r.attending).length
-    const no = responses.filter(r => !r.attending).length
-    return { yes, no, total: responses.length }
   }
 
   if (loading) {
@@ -147,7 +132,7 @@ export function AttendanceListPage() {
       ) : (
         <div className="space-y-4">
           {attendances.map((attendance) => {
-            const counts = countResponses(attendance.responses)
+            const counts = countAttendanceResponses(attendance)
             return (
               <div
                 key={attendance.id}
@@ -166,7 +151,7 @@ export function AttendanceListPage() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <span className="flex items-center gap-1">
                         <Calendar className="h-4 w-4" />
-                        {formatDate(attendance.date)}
+                        {formatMeetingDate(attendance.date, 'full')}
                       </span>
                       <span>•</span>
                       <span className="flex items-center gap-1">

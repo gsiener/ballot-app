@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react'
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Copy, Calendar, Users, Check, X } from 'lucide-react'
-import type { Attendance } from 'shared/dist'
-
-const API_URL = import.meta.env.VITE_API_URL || 'https://ballot-app-server.siener.workers.dev'
+import { formatMeetingDate, countAttendanceResponses, type Attendance } from 'shared/dist'
+import { attendanceApi } from '../api/client'
 
 interface AttendanceDetailProps {
   attendanceId: string
@@ -24,10 +23,7 @@ export function AttendanceDetail({ attendanceId, onBack }: AttendanceDetailProps
 
   const fetchAttendance = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/attendance/${attendanceId}`)
-      if (!response.ok) throw new Error('Failed to fetch attendance')
-      const data = await response.json()
-      setAttendance(data)
+      setAttendance(await attendanceApi.getById(attendanceId))
     } catch (error) {
       console.error('Error fetching attendance:', error)
     } finally {
@@ -43,18 +39,7 @@ export function AttendanceDetail({ attendanceId, onBack }: AttendanceDetailProps
 
     setSubmitting(true)
     try {
-      const response = await fetch(`${API_URL}/api/attendance/${attendanceId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          name: name.trim(),
-          attending
-        }),
-      })
-      if (!response.ok) throw new Error('Failed to submit response')
-      const updatedAttendance = await response.json()
+      const updatedAttendance = await attendanceApi.respond(attendanceId, name.trim(), attending)
       setAttendance(updatedAttendance)
       setName('')
     } catch (error) {
@@ -65,16 +50,6 @@ export function AttendanceDetail({ attendanceId, onBack }: AttendanceDetailProps
     }
   }
 
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString + 'T00:00:00')
-    return date.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric'
-    })
-  }
-
   const formatTimestamp = (timestamp: string) => {
     const date = new Date(timestamp)
     return date.toLocaleString('en-US', {
@@ -83,13 +58,6 @@ export function AttendanceDetail({ attendanceId, onBack }: AttendanceDetailProps
       hour: 'numeric',
       minute: '2-digit'
     })
-  }
-
-  const countResponses = () => {
-    if (!attendance) return { yes: 0, no: 0 }
-    const yes = attendance.responses.filter(r => r.attending).length
-    const no = attendance.responses.filter(r => !r.attending).length
-    return { yes, no }
   }
 
   const existingResponse = attendance?.responses.find(
@@ -115,7 +83,7 @@ export function AttendanceDetail({ attendanceId, onBack }: AttendanceDetailProps
     )
   }
 
-  const counts = countResponses()
+  const counts = countAttendanceResponses(attendance)
 
   return (
     <div className="container mx-auto p-4 max-w-3xl">
@@ -124,7 +92,7 @@ export function AttendanceDetail({ attendanceId, onBack }: AttendanceDetailProps
         <div className="text-sm text-muted-foreground mb-4">
           <div className="flex items-center gap-2 mb-2">
             <Calendar className="h-4 w-4" />
-            <span className="font-medium">{formatDate(attendance.date)}</span>
+            <span className="font-medium">{formatMeetingDate(attendance.date, 'full')}</span>
           </div>
           <div className="flex items-center gap-2 mb-2">
             <a
