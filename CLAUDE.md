@@ -66,10 +66,12 @@ npx wrangler secret put ADMIN_API_KEY
 ### Monorepo Structure
 This is a **Bun workspace** monorepo with three packages:
 
-1. **`shared/`** - Shared TypeScript types used by both client and server
+1. **`shared/`** - Shared TypeScript types AND runtime domain logic used by client, server, and edge
    - Must be built FIRST before other packages
    - Exports common types like `ApiResponse`
-   - Changes here require rebuilding server and client
+   - Also exports runtime modules: `dates.ts` (meeting-date parse/format — owns the timezone-free calendar-day rule) and `counting.ts` (vote/attendance counting)
+   - Changes here require rebuilding server and client (`bun run build:shared`)
+   - See `CONTEXT.md` for the deep modules and domain language
 
 2. **`server/`** - Hono-based REST API on Cloudflare Workers
    - Uses OpenTelemetry for comprehensive observability
@@ -202,13 +204,17 @@ See `.github/DEPLOYMENT_SETUP.md` for detailed setup instructions.
 
 ### Adding a New API Endpoint
 
-1. Define route in `server/src/index.ts`
-2. Create span with `createSpan('operation_name')`
-3. Add business event attributes with `recordSpanEvent()`
-4. Set span status with `setSpanStatus(span, success, message)`
-5. Handle KV operations with `getAllBallots()` and `saveBallots()`
-6. Write tests in `server/src/index.test.ts`
-7. Add integration test in `server/tests/integration.test.ts` if multi-step
+Prefer the handler factory in `server/src/handlers.ts` over hand-rolling
+read-modify-write logic. Ballots, dashboards, and attendances all route through
+`createListHandler` / `createGetByIdHandler` / `createCreateHandler` /
+`createUpdateHandler` / `createDeleteHandler` / `createBatchHandler`, driven by a
+`ResourceConfig` whose `getAll`/`saveAll` come from a `kvCollection` (see below).
+
+1. Define a `kvCollection` store + `ResourceConfig` for the resource (if new)
+2. Compose the route from the factory helpers with `validate` / `applyUpdates` / `buildItem` options
+3. Only write a custom handler when behavior genuinely can't be expressed via the factory (e.g. the admin bulk-migrate route)
+4. Optimistic locking via the factory is **opt-in**: the version check fires only when the client sends a `version`
+5. Add route-level tests in `server/src/routes.test.ts` (drives the real app via `app.request()` with an in-memory KV)
 
 ### Working with Shared Types
 
@@ -228,21 +234,23 @@ See `.github/DEPLOYMENT_SETUP.md` for detailed setup instructions.
 
 ### KV Storage Patterns
 
-**Ballots:**
-- Load all ballots: `const ballots = await getAllBallots(c.env.BALLOTS_KV)`
-- Find ballot: `ballots.find(b => b.id === id)`
-- Modify array: push/splice/filter
-- Save back: `await saveBallots(c.env.BALLOTS_KV, ballots)`
+KV access goes through the `kvCollection` deep module (`server/src/kv.ts`), which
+owns the read/parse/fallback + serialize/save pattern once. Each resource is a
+key plus a fallback:
 
-**Dashboards:**
-- Load all dashboards: `const dashboards = await getAllDashboards(c.env.BALLOTS_KV)`
-- Find dashboard: `dashboards.find(d => d.id === id)`
-- Modify array: push/splice/filter
-- Save back: `await saveDashboards(c.env.BALLOTS_KV, dashboards)`
+```ts
+const ballotStore = kvCollection<Ballot>('ballots', { fallback: () => demoData, seedOnEmpty: true })
+const dashboardStore = kvCollection<Dashboard>('dashboards')
+const attendanceStore = kvCollection<Attendance>('attendances')
 
-**General:**
-- Handle eventual consistency - consider optimistic locking for high-concurrency scenarios
-- Both ballots and dashboards use the same KV namespace (BALLOTS_KV) with different keys
+const ballots = await ballotStore.getAll(c.env.BALLOTS_KV)
+// find / push / splice / filter ...
+await ballotStore.saveAll(c.env.BALLOTS_KV, ballots)
+```
+
+- The `KVNamespace` is the port; an in-memory map is the test adapter (see `kv.test.ts`)
+- All resources share the `BALLOTS_KV` namespace with different keys
+- Handle eventual consistency — optimistic locking is available via the handler factory
 
 ## Important Notes
 

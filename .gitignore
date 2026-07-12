@@ -39,3 +39,6 @@ pnpm-debug.log*
 
 # Bun
 bun.lockb
+
+# Cloudflare / Wrangler local state (Miniflare KV, etc.)
+.wrangler
