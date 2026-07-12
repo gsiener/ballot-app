@@ -45,10 +45,9 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: deploy
           workingDirectory: ./
-          secrets: |
-            HONEYCOMB_API_KEY
-        env:
-          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
+          # HONEYCOMB_API_KEY / ADMIN_API_KEY are managed directly on the Worker
+          # (`wrangler secret put`) and persist across deploys, so CI does not
+          # re-upload them — that step needed a broader token scope than deploy.
 
       - name: Deploy to Cloudflare Pages (Client)
         if: github.ref == 'refs/heads/main'
